@@ -9,3 +9,5 @@ All notable changes to this project are documented here. The format follows
 ## [0.1.0]
 
 - First release.
+- `AtomicInt` with `get`, `set`, `add`, `increment`, `decrement`,
+  `compare_and_set` and `get_and_set`, each guarded by a single internal lock.
