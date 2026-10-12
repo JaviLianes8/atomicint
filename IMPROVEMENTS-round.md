@@ -6,9 +6,9 @@ Progress:
 - [x] Fetch-then-modify operations: `get_and_add`, `compare_and_exchange`, `update`, `get_and_update`
 - [x] `BoundedAtomicInt`: range with `raise`, `saturate` or `wrap` on overflow
 - [x] Pickle, copy and `int()` support
-- [ ] Contracts: linearizability stress tests, free-threaded run, typing, README examples, installed wheel e2e
-- [ ] Docs: README, CHANGELOG, docstrings, packaging metadata
-- [ ] Gates: ruff format, ruff check, mypy --strict, pytest
+- [x] Contracts: linearizability stress tests, free-threaded run, typing, README examples, installed wheel e2e
+- [x] Docs: README, CHANGELOG, docstrings, packaging metadata
+- [x] Gates: ruff format, ruff check, mypy --strict, pytest
 - [ ] Independent review findings fixed with regression tests
 - [ ] Pull request opened, guard clean
 
@@ -104,3 +104,16 @@ the Python documentation and real use:
   instead of updating the shared object.
 - Sharing one counter between processes: that needs shared memory; pickling produces an
   independent copy, which is documented.
+
+## Verification
+
+- Gates on CPython 3.13.2: `ruff format --check .`, `ruff check .`, `mypy --strict src tests`
+  and `pytest` (with `ATOMICINT_E2E=1` the installed-wheel test runs too).
+- The suite also passes on CPython 3.10.19 and on the free-threaded CPython 3.14.2 build,
+  where `sys._is_gil_enabled()` is `False` for the whole run and a fresh interpreter that
+  imports and uses the package keeps the GIL off.
+- Guarded logic was removed one piece at a time (40 mutations: each lock, each range
+  check, each coercion, each return value, the pickling hooks). The suite fails for every
+  one, the lock removals also on the free-threaded build. The one survivor is removing
+  the lock from `get()`: a single attribute read is already atomic, so no test can tell.
+  The lock stays so the read is ordered with the writes by the same primitive.
