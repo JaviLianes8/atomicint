@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "atomicint"
-version = "0.1.0"
+version = "0.2.0"
 description = "Thread-safe atomic integer with get, set, add, increment, decrement, compare-and-set and get-and-set, backed by a lock, zero dependencies, fully typed"
 readme = "README.md"
 requires-python = ">=3.10"

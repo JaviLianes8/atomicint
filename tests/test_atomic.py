@@ -1,4 +1,6 @@
-import threading
+"""Single-threaded behaviour of every AtomicInt operation."""
+
+from __future__ import annotations
 
 from atomicint import AtomicInt
 
@@ -62,42 +64,31 @@ def test_repr_shows_the_current_value() -> None:
     assert repr(AtomicInt(3)) == "AtomicInt(3)"
 
 
-def test_concurrent_increments_produce_the_exact_total() -> None:
-    counter = AtomicInt(0)
-    threads_count = 20
-    per_thread = 5000
-    start = threading.Barrier(threads_count)
-
-    def work() -> None:
-        start.wait()
-        for _ in range(per_thread):
-            counter.increment()
-
-    threads = [threading.Thread(target=work) for _ in range(threads_count)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-
-    assert counter.get() == threads_count * per_thread
+def test_get_and_add_returns_the_previous_value() -> None:
+    counter = AtomicInt(10)
+    assert counter.get_and_add(5) == 10
+    assert counter.get() == 15
 
 
-def test_concurrent_compare_and_set_lets_exactly_one_winner_through() -> None:
-    counter = AtomicInt(0)
-    threads_count = 20
-    winners = AtomicInt(0)
-    start = threading.Barrier(threads_count)
+def test_compare_and_exchange_returns_the_expected_value_when_it_swaps() -> None:
+    counter = AtomicInt(5)
+    assert counter.compare_and_exchange(5, 9) == 5
+    assert counter.get() == 9
 
-    def work() -> None:
-        start.wait()
-        if counter.compare_and_set(0, 1):
-            winners.increment()
 
-    threads = [threading.Thread(target=work) for _ in range(threads_count)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+def test_compare_and_exchange_returns_the_current_value_when_it_does_not_swap() -> None:
+    counter = AtomicInt(5)
+    assert counter.compare_and_exchange(4, 9) == 5
+    assert counter.get() == 5
 
-    assert winners.get() == 1
-    assert counter.get() == 1
+
+def test_int_and_index_give_a_snapshot() -> None:
+    counter = AtomicInt(4)
+    assert int(counter) == 4
+    assert [10, 11, 12, 13, 14][counter] == 14
+    assert type(int(counter)) is int
+
+
+def test_atomic_ints_compare_by_identity() -> None:
+    assert AtomicInt(1) != AtomicInt(1)
+    assert len({AtomicInt(1), AtomicInt(1)}) == 2

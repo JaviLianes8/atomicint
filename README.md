@@ -15,17 +15,17 @@ from atomicint import AtomicInt
 
 counter = AtomicInt(0)
 
-counter.increment()            # 1
-counter.add(10)                # 11
-counter.decrement()            # 10
+counter.increment()  # 1
+counter.add(10)  # 11
+counter.decrement()  # 10
 
-counter.get()                  # 10
+counter.get()  # 10
 counter.set(5)
-counter.get_and_set(99)        # returns 5, value is now 99
+counter.get_and_set(99)  # returns 5, value is now 99
 
 # compare-and-set: only swaps when the current value matches
-counter.compare_and_set(99, 0) # True, value is now 0
-counter.compare_and_set(99, 1) # False, value stays 0
+counter.compare_and_set(99, 0)  # True, value is now 0
+counter.compare_and_set(99, 1)  # False, value stays 0
 ```
 
 Every method takes one internal lock for the whole operation, so compound
@@ -37,9 +37,11 @@ from atomicint import AtomicInt
 
 hits = AtomicInt(0)
 
+
 def worker() -> None:
     for _ in range(1000):
         hits.increment()
+
 
 threads = [threading.Thread(target=worker) for _ in range(8)]
 for t in threads:

@@ -2,10 +2,10 @@
 
 Progress:
 - [x] Brainstorm ranked improvements (this file)
-- [ ] Strict integer inputs: `operator.index`, no silent truncation, no `bool`
-- [ ] Fetch-then-modify operations: `get_and_add`, `compare_and_exchange`, `update`, `get_and_update`
-- [ ] `BoundedAtomicInt`: range with `raise`, `saturate` or `wrap` on overflow
-- [ ] Pickle, copy and `int()` support
+- [x] Strict integer inputs: `operator.index`, no silent truncation, no `bool`
+- [x] Fetch-then-modify operations: `get_and_add`, `compare_and_exchange`, `update`, `get_and_update`
+- [x] `BoundedAtomicInt`: range with `raise`, `saturate` or `wrap` on overflow
+- [x] Pickle, copy and `int()` support
 - [ ] Contracts: linearizability stress tests, free-threaded run, typing, README examples, installed wheel e2e
 - [ ] Docs: README, CHANGELOG, docstrings, packaging metadata
 - [ ] Gates: ruff format, ruff check, mypy --strict, pytest
