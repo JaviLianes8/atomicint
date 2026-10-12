@@ -112,7 +112,7 @@ the Python documentation and real use:
 - The suite also passes on CPython 3.10.19 and on the free-threaded CPython 3.14.2 build,
   where `sys._is_gil_enabled()` is `False` for the whole run and a fresh interpreter that
   imports and uses the package keeps the GIL off.
-- Guarded logic was removed one piece at a time (40 mutations: each lock, each range
+- Guarded logic was removed one piece at a time (39 mutations: each lock, each range
   check, each coercion, each return value, the pickling hooks). The suite fails for every
   one, the lock removals also on the free-threaded build. The one survivor is removing
   the lock from `get()`: a single attribute read is already atomic, so no test can tell.
