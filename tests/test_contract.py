@@ -1,10 +1,14 @@
+"""The public surface: names, version and type information."""
+
+from __future__ import annotations
+
 import importlib.resources
 
 import atomicint
 
 # The public API. Add every exported name here as the library grows; this list is the
 # contract and the test below fails if the module and this list disagree.
-PUBLIC_API: list[str] = ["AtomicInt"]
+PUBLIC_API: list[str] = ["AtomicInt", "BoundedAtomicInt", "Overflow"]
 
 
 def test_all_lists_exactly_the_public_api() -> None:
