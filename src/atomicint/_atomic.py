@@ -116,10 +116,8 @@ class AtomicInt:
                     return current, self._value
                 current = self._value
 
-    def __int__(self) -> int:
-        return self.get()
-
     def __index__(self) -> int:
+        # Also serves int(), which falls back to __index__.
         return self.get()
 
     def __reduce__(self) -> tuple[Any, ...]:

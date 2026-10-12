@@ -35,8 +35,10 @@ def test_every_pickle_protocol_round_trips_a_bounded_counter() -> None:
         assert twin.add(5) == 2
 
 
-def test_a_subclass_survives_a_copy() -> None:
-    assert type(copy.deepcopy(Tagged(3))) is Tagged
+def test_a_subclass_survives_a_copy_and_shows_its_own_name() -> None:
+    twin = copy.deepcopy(Tagged(3))
+    assert type(twin) is Tagged
+    assert repr(twin) == "Tagged(3)"
 
 
 def test_a_copy_inside_a_container_is_independent() -> None:

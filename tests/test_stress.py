@@ -122,3 +122,18 @@ def test_concurrent_updates_and_mixed_operations_add_up() -> None:
     # Every operation only grows the value, so no two updates can start from the same one.
     assert len(olds) == len(set(olds))
     assert counter.get() == (THREADS // 2) * rounds * (2 + 4)
+
+
+def test_get_and_set_returns_every_stored_token_exactly_once() -> None:
+    counter = AtomicInt(-1)
+    returned: list[int] = []
+
+    def worker(base: int) -> None:
+        mine = [counter.get_and_set(base + i) for i in range(PER_THREAD)]
+        returned.extend(mine)
+
+    with tight_switching():
+        run_threads([functools.partial(worker, n * PER_THREAD) for n in range(THREADS)])
+    # Each swap hands back what the previous swap stored: nothing duplicated or dropped.
+    tokens = list(range(THREADS * PER_THREAD))
+    assert sorted([*returned, counter.get()]) == [-1, *tokens]
