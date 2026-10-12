@@ -76,7 +76,10 @@ class AtomicInt:
 
         Return ``True`` when the swap happened, ``False`` otherwise.
         """
-        return self.compare_and_exchange(expect, new) == as_int(expect, "expect")
+        # Convert once: an __index__ that answers differently each call must not
+        # make a successful swap report False.
+        wanted = as_int(expect, "expect")
+        return self.compare_and_exchange(wanted, new) == wanted
 
     def compare_and_exchange(self, expect: SupportsIndex, new: SupportsIndex) -> int:
         """Set the value to ``new`` only if it currently equals ``expect``.
@@ -121,8 +124,38 @@ class AtomicInt:
         return self.get()
 
     def __reduce__(self) -> tuple[Any, ...]:
-        # The lock cannot be pickled; a copy is a new, independent counter.
-        return (type(self), (self.get(),))
+        # The lock cannot be pickled. Rebuild without calling __init__, so subclasses
+        # with their own constructor or extra attributes come back intact.
+        return (_blank, (type(self),), self.__getstate__())
+
+    def __getstate__(self) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        with self._lock:
+            slots = {n: getattr(self, n) for n in _slot_names(type(self)) if hasattr(self, n)}
+        return (getattr(self, "__dict__", None), slots)
+
+    def __setstate__(self, state: tuple[dict[str, Any] | None, dict[str, Any]]) -> None:
+        extra, slots = state
+        if extra:
+            vars(self).update(extra)
+        for name, value in slots.items():
+            object.__setattr__(self, name, value)
+        object.__setattr__(self, "_lock", threading.Lock())
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.get()})"
+
+
+def _blank(cls: type[AtomicInt]) -> AtomicInt:
+    return cls.__new__(cls)
+
+
+def _slot_names(cls: type) -> list[str]:
+    names: list[str] = []
+    for klass in cls.__mro__:
+        declared = klass.__dict__.get("__slots__", ())
+        for name in (declared,) if isinstance(declared, str) else declared:
+            if name.startswith("__") and not name.endswith("__"):
+                name = f"_{klass.__name__.lstrip('_')}{name}"  # private names are mangled
+            if name not in ("_lock", "__dict__", "__weakref__"):
+                names.append(name)
+    return names

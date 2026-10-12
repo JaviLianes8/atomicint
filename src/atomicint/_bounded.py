@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import functools
-from typing import Any, Literal, SupportsIndex
+from typing import Literal, SupportsIndex
 
 from ._atomic import AtomicInt
 from ._coerce import as_int
@@ -36,12 +35,13 @@ class BoundedAtomicInt(AtomicInt):
         high = None if maximum is None else as_int(maximum, "maximum")
         if low is not None and high is not None and low > high:
             raise ValueError(f"minimum {low} is greater than maximum {high}")
-        if overflow not in _POLICIES:
-            raise ValueError(f"overflow must be one of {_POLICIES}, not {overflow!r}")
+        policy: object = overflow  # compared exactly: a str subclass or odd __eq__ is refused
+        if type(policy) is not str or policy not in _POLICIES:
+            raise ValueError(f"overflow must be one of {_POLICIES}, not {policy!r}")
         if overflow == "wrap" and (low is None or high is None):
             raise ValueError("overflow='wrap' needs both minimum and maximum")
-        self._minimum = low
-        self._maximum = high
+        self._minimum: int | None = low
+        self._maximum: int | None = high
         self._overflow: Overflow = overflow
         super().__init__(value)
 
@@ -74,12 +74,6 @@ class BoundedAtomicInt(AtomicInt):
             return clamp
         assert low is not None and high is not None
         return low + (value - low) % (high - low + 1)
-
-    def __reduce__(self) -> tuple[Any, ...]:
-        rebuild = functools.partial(
-            type(self), minimum=self._minimum, maximum=self._maximum, overflow=self._overflow
-        )
-        return (rebuild, (self.get(),))
 
     def __repr__(self) -> str:
         return (

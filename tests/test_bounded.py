@@ -121,3 +121,20 @@ def test_bad_configuration_is_rejected(kwargs: dict[str, Any], message: str) -> 
 def test_repr_shows_value_bounds_and_policy() -> None:
     counter = BoundedAtomicInt(3, minimum=0, maximum=9, overflow="wrap")
     assert repr(counter) == "BoundedAtomicInt(3, minimum=0, maximum=9, overflow='wrap')"
+
+
+class Loud(str):
+    pass
+
+
+class Anything:
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    __hash__ = object.__hash__
+
+
+@pytest.mark.parametrize("policy", [Loud("raise"), Anything(), None, 1])
+def test_the_overflow_policy_must_be_one_of_the_exact_names(policy: Any) -> None:
+    with pytest.raises(ValueError, match="overflow must be one of"):
+        BoundedAtomicInt(0, overflow=policy)

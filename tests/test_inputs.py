@@ -66,3 +66,62 @@ def test_bounds_must_be_integers(name: str) -> None:
     with pytest.raises(TypeError, match=f"{name} must be an integer"):
         kwargs: dict[str, Any] = {name: 1.5}
         BoundedAtomicInt(0, **kwargs)
+
+
+class Flip:
+    """An __index__ that answers 0 the first time and 1 afterwards."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __index__(self) -> int:
+        self.calls += 1
+        return 0 if self.calls == 1 else 1
+
+
+class Truthy:
+    def __index__(self) -> int:
+        return True
+
+
+class Wordy:
+    def __index__(self) -> int:
+        return "3"  # type: ignore[return-value]
+
+
+class Big(int):
+    pass
+
+
+def test_compare_and_set_reads_expect_once_and_reports_the_swap() -> None:
+    counter = AtomicInt(0)
+    flip = Flip()
+    assert counter.compare_and_set(flip, 7) is True
+    assert counter.get() == 7
+    assert flip.calls == 1
+
+
+@pytest.mark.filterwarnings("error")
+@pytest.mark.parametrize("odd", [Truthy(), Wordy()])
+def test_an_index_hook_returning_a_non_integer_is_refused(odd: Any) -> None:
+    with pytest.raises(TypeError, match=r"value must be an integer, but its __index__ returned"):
+        AtomicInt(odd)
+    counter = AtomicInt(2)
+    with pytest.raises(TypeError, match=r"amount must be an integer"):
+        counter.add(odd)
+    assert counter.get() == 2
+
+
+def test_an_int_subclass_is_stored_as_a_plain_int() -> None:
+    counter = AtomicInt(Big(5))
+    assert type(counter.get()) is int
+    assert type(counter.add(Big(1))) is int
+
+
+class GivesBig:
+    def __index__(self) -> int:
+        return Big(3)
+
+
+def test_an_index_hook_returning_an_int_subclass_is_stored_as_a_plain_int() -> None:
+    assert type(AtomicInt(GivesBig()).get()) is int

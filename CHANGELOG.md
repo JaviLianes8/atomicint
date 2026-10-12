@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.2.0]
+## [0.2.0] - 2026-10-12
 
 ### Added
 
@@ -18,7 +18,7 @@ All notable changes to this project are documented here. The format follows
 - `BoundedAtomicInt`: an `AtomicInt` kept inside `[minimum, maximum]` with an overflow
   policy of `"raise"`, `"saturate"` or `"wrap"`, and the `Overflow` type for it.
 - Copy, deep copy and pickle support: the copy is an independent counter with the same
-  value and bounds.
+  value, bounds and subclass attributes.
 - `int(counter)` and `operator.index(counter)` return a snapshot.
 - Tested on free-threaded CPython with the GIL disabled; free-threading classifier.
 

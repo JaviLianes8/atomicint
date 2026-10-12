@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -39,6 +39,9 @@ Issues = "https://github.com/JaviLianes8/atomicint/issues"
 Changelog = "https://github.com/JaviLianes8/atomicint/blob/main/CHANGELOG.md"
 LinkedIn = "https://www.linkedin.com/in/jlianes/"
 Funding = "https://buymeacoffee.com/jlianesglrs"
+
+[tool.hatch.build.targets.sdist]
+exclude = [".github", "IMPROVEMENTS-round*.md"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/atomicint"]

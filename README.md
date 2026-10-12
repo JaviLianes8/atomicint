@@ -27,6 +27,7 @@ print(int(counter))  # 99
 
 Every value must be a real integer. Floats, strings and `bool` raise `TypeError` instead
 of being truncated or parsed; integer-like objects such as NumPy integers are accepted.
+Type checkers treat `bool` as an integer, so that one is caught at run time only.
 
 ```python
 from atomicint import AtomicInt
@@ -138,8 +139,8 @@ print(sorted(issued) == list(range(1, 8001)))  # True
 ## Copies and pickling
 
 A counter can be copied, deep-copied and pickled (to send it to a process pool, for
-instance). The copy is a new, independent counter with the same value and bounds; it does
-not share updates with the original. Counters compare by identity, never by value.
+instance). The copy is a new, independent counter with the same value, bounds and
+subclass attributes; it does not share updates with the original. Counters compare by identity, never by value.
 
 ```python
 import pickle

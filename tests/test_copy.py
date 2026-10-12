@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import copy
 import pickle
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 
 from atomicint import AtomicInt, BoundedAtomicInt
+
+Clone = Callable[[Any], Any]
+CLONES: list[Clone] = [copy.copy, copy.deepcopy, lambda c: pickle.loads(pickle.dumps(c))]
 
 
 class Tagged(AtomicInt):
@@ -46,3 +51,56 @@ def test_a_copy_inside_a_container_is_independent() -> None:
     clone = copy.deepcopy(config)
     clone["hits"].add(10)
     assert config["hits"].get() == 1
+
+
+class Named(AtomicInt):
+    __slots__ = ("__secret", "name")
+
+    def __init__(self, name: str, value: int = 0) -> None:
+        self.name = name
+        self.__secret = name.upper()
+        super().__init__(value)
+
+    def secret(self) -> str:
+        return self.__secret
+
+
+class Loose(AtomicInt):
+    label: str
+
+
+class Gauge(BoundedAtomicInt):
+    __slots__ = ("unit",)
+    unit: str
+
+
+@pytest.mark.parametrize("clone", CLONES)
+def test_a_subclass_with_its_own_constructor_keeps_every_attribute(clone: Clone) -> None:
+    twin = clone(Named("hits", 3))
+    assert isinstance(twin, Named)
+    assert (twin.name, twin.secret(), twin.get()) == ("hits", "HITS", 3)
+    assert twin.increment() == 4
+
+
+@pytest.mark.parametrize("clone", CLONES)
+def test_a_subclass_without_slots_keeps_its_instance_attributes(clone: Clone) -> None:
+    original = Loose(1)
+    original.label = "x"
+    twin = clone(original)
+    assert (twin.label, twin.get()) == ("x", 1)
+
+
+@pytest.mark.parametrize("clone", CLONES)
+def test_a_bounded_subclass_keeps_bounds_attributes_and_its_name(clone: Clone) -> None:
+    original = Gauge(9, minimum=0, maximum=9, overflow="wrap")
+    original.unit = "ms"
+    twin = clone(original)
+    assert twin.unit == "ms"
+    assert repr(twin) == "Gauge(9, minimum=0, maximum=9, overflow='wrap')"
+    assert twin.increment() == 0
+    assert original.get() == 9
+
+
+def test_an_unset_slot_stays_unset_in_the_copy() -> None:
+    twin = copy.copy(Gauge(1))
+    assert not hasattr(twin, "unit")

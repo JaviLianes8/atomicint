@@ -9,7 +9,7 @@ Progress:
 - [x] Contracts: linearizability stress tests, free-threaded run, typing, README examples, installed wheel e2e
 - [x] Docs: README, CHANGELOG, docstrings, packaging metadata
 - [x] Gates: ruff format, ruff check, mypy --strict, pytest
-- [ ] Independent review findings fixed with regression tests
+- [x] Independent review findings fixed with regression tests
 - [ ] Pull request opened, guard clean
 
 ## Starting point
@@ -102,6 +102,8 @@ the Python documentation and real use:
 - `__eq__`, `__hash__` and arithmetic dunders (`counter += 1`): a mutable counter that
   compares by value breaks dict keys, and `counter = counter + 1` would rebind the name
   instead of updating the shared object.
+- `bool(counter)`: a counter object is always truthy, as before. Making it follow the
+  value would change the meaning of `if counter:` checks in existing code.
 - Sharing one counter between processes: that needs shared memory; pickling produces an
   independent copy, which is documented.
 
@@ -112,8 +114,28 @@ the Python documentation and real use:
 - The suite also passes on CPython 3.10.19 and on the free-threaded CPython 3.14.2 build,
   where `sys._is_gil_enabled()` is `False` for the whole run and a fresh interpreter that
   imports and uses the package keeps the GIL off.
-- Guarded logic was removed one piece at a time (39 mutations: each lock, each range
-  check, each coercion, each return value, the pickling hooks). The suite fails for every
-  one, the lock removals also on the free-threaded build. The one survivor is removing
-  the lock from `get()`: a single attribute read is already atomic, so no test can tell.
-  The lock stays so the read is ordered with the writes by the same primitive.
+- Guarded logic was removed one piece at a time (48 mutations: each lock, each range
+  check, each coercion step, each return value, the pickling state). The suite fails for
+  45 of them, the lock removals also on the free-threaded build. The three survivors
+  cannot be told apart by any test: dropping the lock around a single attribute read in
+  `get()` and in the pickling state (that read is already atomic), and dropping the fast
+  path for plain `int` inputs in the coercion (the slow path gives the same answer).
+
+## Review fixes
+
+- Copies and pickles of subclasses keep their state. The first version rebuilt a copy
+  by calling `type(self)(value)`, so a subclass with its own constructor came back with
+  the wrong value in the wrong attribute, and instance attributes were dropped. A copy
+  is now rebuilt without calling `__init__`, from every slot (private names included) and
+  the instance dictionary, with a fresh lock.
+- `compare_and_set` converts `expect` once. An `__index__` that answered differently on
+  a second call could make a successful swap report `False`.
+- An `__index__` that returns `True`, a non-integer or an `int` subclass is handled
+  explicitly: the first two raise `TypeError` (not a deprecation warning), the last is
+  stored as a plain `int`.
+- The overflow policy must be exactly one of the three strings; a `str` subclass or an
+  object whose `__eq__` always answers yes is refused.
+- A bounded subclass shows its own name in `repr()`.
+- Packaging: `hatchling>=1.27` (needed for the SPDX license field), the sdist leaves out
+  the planning notes and the GitHub folder, and the CHANGELOG entry is dated.
+- The README says `bool` is refused at run time only, since type checkers accept it.
