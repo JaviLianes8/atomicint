@@ -265,7 +265,8 @@ calls `super()`. The names are read once, when the class is made, so a slot whos
 descriptor is later replaced on the class (by a property that calls it, say) is still
 copied, a copy never reads the class dictionary (another thread may change the class
 meanwhile), and its cost grows only in step with the number of slots. Nothing is added to
-the subclass's namespace. One exception: a class made under a base whose
+the subclass's namespace, and the names are kept by the class's identity, so a metaclass
+that makes classes equal by name, or unhashable, changes nothing. One exception: a class made under a base whose
 `__init_subclass__` does not call `super()` is not seen when it is made, so its names are
 read at its first copy and kept from then on. A pickle refers only to the counter's class
 and the standard `copyreg` module. The classes keep the module that defines them, so a

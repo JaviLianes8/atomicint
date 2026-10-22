@@ -10,10 +10,30 @@ from typing import Any
 
 State = tuple[dict[str, Any] | None, dict[str, Any]]
 
-# The slot names of each class, keyed by the class itself. An attribute on the class would
-# be copied into any class rebuilt from its namespace (dataclass(slots=True) does that),
-# and its name could clash with a slot or an attribute of a subclass.
-_NAMES: weakref.WeakKeyDictionary[type, tuple[str, ...]] = weakref.WeakKeyDictionary()
+# The slot names of each class, kept outside it: an attribute on the class would be copied
+# into any class rebuilt from its namespace (dataclass(slots=True) does that), and its name
+# could clash with a slot or an attribute of a subclass. Keyed by identity, through id()
+# and a weak reference, because a metaclass may redefine __eq__ and __hash__: classes equal
+# by name would share one entry, and unhashable classes could not be keys at all.
+_NAMES: dict[int, tuple[weakref.ref[type], tuple[str, ...]]] = {}
+
+
+def _known(cls: type) -> tuple[str, ...] | None:
+    entry = _NAMES.get(id(cls))
+    return entry[1] if entry is not None and entry[0]() is cls else None
+
+
+def _keep(cls: type, names: tuple[str, ...]) -> None:
+    key, table = id(cls), _NAMES  # held here, so module teardown cannot take them away
+
+    def forget(ref: weakref.ref[type]) -> None:
+        # Runs when the class dies, before its id can be reused by another object.
+        entry = table.get(key)
+        if entry is not None and entry[0] is ref:
+            table.pop(key, None)
+
+    table[key] = (weakref.ref(cls, forget), names)
+
 
 _NOT_COPIED = ("_lock", "__dict__", "__weakref__")
 
@@ -54,28 +74,29 @@ def _listed(klass: type) -> dict[str, None]:
 
 def _collect(cls: type) -> tuple[str, ...]:
     names: dict[str, None] = {}
-    covered: set[type] = set()
+    covered: set[int] = set()  # ids, as a class may not be hashable
     for klass in cls.__mro__:
-        if klass in covered:
+        if id(klass) in covered:
             continue
-        known = _NAMES.get(klass)
+        known = _known(klass)
         if known is None:
             names.update(_declared(klass))
         else:
             # Stored names already hold those of every class above klass: skipping them
             # keeps making a class linear in the depth of its hierarchy.
             names.update(dict.fromkeys(known))
-            covered.update(klass.__mro__)
+            covered.update(map(id, klass.__mro__))
     return tuple(names)
 
 
 def slot_names(cls: type) -> tuple[str, ...]:
     """Every slot Python created along the class hierarchy, except the lock."""
-    known = _NAMES.get(cls)
+    known = _known(cls)
     if known is None:
         # Only a subclass whose base skipped super().__init_subclass__() gets here: its
         # names are worked out at its first copy and kept from then on.
-        known = _NAMES[cls] = _collect(cls)
+        known = _collect(cls)
+        _keep(cls, known)
     return known
 
 
@@ -105,7 +126,7 @@ class Copyable:
         super().__init_subclass__(**kwargs)
         # Fixed now, while every slot still has the descriptor Python made: a wrapper may
         # replace one on the class later, and a copy then reads no class dictionary at all.
-        _NAMES[cls] = tuple(dict.fromkeys(_collect(cls)) | _listed(cls))
+        _keep(cls, tuple(dict.fromkeys(_collect(cls)) | _listed(cls)))
 
     def __reduce__(self) -> tuple[Any, ...]:
         # The lock cannot be pickled. Rebuild without calling __init__, so subclasses
