@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -269,3 +269,50 @@ Commits of this round: 016f1ab (policy type), da6f468 (module and source lookup)
 1cb8697 (underscore-only class names), 3f82b99 (race and update contracts), e692e78
 (limits pinned, docstrings), 886c376 (doc type check, README example), 05e12ea
 (CHANGELOG and GUIDE), 046aaac (wheel e2e), and the commit that records this section.
+
+### Round 2 re-check (lenses c and e at 08186fc)
+
+Lens e confirmed the four findings of its round 2 fixed at 08186fc (each mutant killed by
+the contract added for it, each probe correct) and reported eight surviving mutants. Lens
+c found one new defect in the slot code changed by 1cb8697.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| c | F4 | low | A subclass whose `__slots__` is an iterator (allowed by the language reference) lost its slot values in copies, deep copies and pickles: the iterator is used up when the class is made, so the copy found no names to read. The standard library refuses such a copy with `TypeError` instead of losing data | `slot_names` no longer reads `__slots__` or mangles names itself: it lists the member descriptors Python created on each class of the hierarchy (`types.MemberDescriptorType` whose `__objclass__` is that class), minus `_lock`. The names are exactly the ones Python uses, so a class renamed after it was made keeps its private slots too, and `__dict__` and `__weakref__` (not members) need no skip list. Red before, green after: `tests/test_copy_slots.py` (iterator slots on `AtomicInt` and `BoundedAtomicInt`, the renamed class) under copy, deepcopy and every pickle protocol. CHANGELOG "Fixed" and the GUIDE copies section updated |
+| e | N1-P30 | medium | Nothing pinned that the in-range compare-and-set makes no call under the lock: a mutant that called `self._within(seen)` there survived on 3.14 and 3.14t, breaking the finalizer and signal handler promise | `tests/test_lock_calls.py`: the lock is replaced by one that knows when it is held, and a profile hook records every Python and C call made while it is. CPython runs a finalizer or signal handler only at a call or a backward jump, so an empty record is the promise itself. 19 operations (each compare in range, out of range, won and lost; adds and sets in and out of range; updates, `int`, `repr`, copy, pickle) on `AtomicInt` and under each bounded policy. Deterministic, unlike a timing probe |
+| e | N2-P13 | medium | Nothing pinned a private slot declared by an intermediate class | Case `Child` (a subclass of a class that declares `__tag`) in `test_every_declared_slot_is_kept` |
+| e | N3-P18 | low | Nothing pinned a class whose `__qualname__` differs from `__name__` | Case `Outer.Inner` (a class nested in another, picklable) |
+| e | N4-P19 | low | Nothing pinned a class name with a trailing underscore | Case `Tag_` (`__tag` is `_Tag___tag`) |
+| e | N5-P16 | low | Nothing pinned slot names that also end in `__`, which Python does not mangle | Case `Meta` (`__tag__`) |
+| e | N6-P17 | low | Nothing pinned `__slots__` given as one string | Case `One` (`__slots__ = "tag"`) |
+| e | N7-P20 | low | Nothing pinned a subclass that declares a `__dict__` slot | `test_a_declared_instance_dict_is_copied_not_shared`: after copy, deepcopy and every pickle protocol, the twin has its own dictionary and writing to it leaves the original alone |
+| e | N8-P33 | low | Nothing pinned the 121-bit edge of a bound in an `OverflowError` | `test_bounds_past_120_bits_are_described_by_their_size` gained bounds of exactly 121 bits on both sides |
+
+Lens e's note on an earlier unreported attempt at 51e2af2 (its survivors in `_coerce`, on
+code unchanged since then, are outside this re-check) and lens c's note on renamed classes
+need no other change: renamed classes are covered by the F4 fix. The GUIDE's cost figures
+were not re-measured: this round changes no operation path, only the copy code and tests.
+No finding is disputed.
+
+Verification:
+
+- Red before the fix: on 08186fc the new slot contract failed 24 cases (iterator slots on
+  both classes and the renamed class, under copy, deepcopy and pickle protocols 0 to 5).
+- Mutants: N1-P30 is killed by
+  `tests/test_lock_calls.py::test_no_operation_makes_a_call_while_it_holds_the_lock[cas_won-plain]`
+  and N8-P33 by `tests/test_messages.py::test_bounds_past_120_bits_are_described_by_their_size`,
+  each applied alone to the fixed tree. N2 to N7 mutate the mangling code that the fix
+  removed; applied to the 08186fc `_state.py`, each is killed by the case added for it
+  (`Child`, `Outer.Inner`, `Tag_`, `Meta`, `One`, the `__dict__` test) with the iterator
+  and renamed cases left out. Six mutants of the new slot lookup are killed too
+  ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Gates at 729224f on another machine from a clone, CPython 3.14.2, fetched reference
+  files present, `ATOMICINT_E2E=1`: `ruff format --check .`, `ruff check .`,
+  `mypy --strict src`, `mypy --strict src tests` and `pytest` (582 passed, 7 skipped: the
+  two free-threading tests and the five Java oracle tests, no Java there) each exit 0.
+- The suite at 729224f on every interpreter of this PC (e2e off): 580 passed and 9 skipped
+  on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2; 582 passed and 7 skipped on
+  3.14.2t with the GIL disabled.
+
+Commits of this round: 7b09994 (slot lookup from the member descriptors, CHANGELOG,
+GUIDE), 729224f (lock-call and 121-bit contracts), and the commit that records this section.

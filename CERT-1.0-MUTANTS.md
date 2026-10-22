@@ -122,3 +122,29 @@ absent, `ATOMICINT_E2E` unset). All killed, each by the contract added for it.
 | Q01 | private slots of a `_`-only class name mangled anyway | killed: `tests/test_copy.py::test_a_private_slot_of_an_underscored_subclass_is_copied[copy-_]` |
 | Q02 | wrongly typed policy raises `ValueError` | killed: `tests/test_bounded.py::test_a_policy_that_is_not_a_plain_str_raises_type_error[raise]` |
 | Q03 | classes reported as `atomicint` again | killed: `tests/test_contract_api.py::test_the_classes_use_slots_and_name_the_module_that_defines_them` |
+
+## After the QA round 2 re-check
+
+The fix of lens c's F4 replaced the slot name mangling with a lookup of the member
+descriptors Python created, so S1, M47 and Q01 above mutate code that no longer exists.
+Each mutant below was applied alone and run against `tests` or the copy tests on this PC
+(CPython 3.13.2). Lens e's N2 to N7 were applied to the 08186fc `_state.py` they target and run
+against `tests/test_copy_slots.py` without the iterator and renamed cases (which that
+code fails anyway); the rest were applied to the fixed tree.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| N1-P30 | in-range compare calls `self._within(seen)` under the lock | killed: `tests/test_lock_calls.py::test_no_operation_makes_a_call_while_it_holds_the_lock[cas_won-plain]` |
+| N2-P13 | private slots mangled with the leaf class name | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-Child]` |
+| N3-P18 | private slots mangled with `__qualname__` | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-Outer.Inner]` |
+| N4-P19 | trailing underscores stripped from the class name too | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-Tag_]` |
+| N5-P16 | names ending in `__` mangled | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-Meta]` |
+| N6-P17 | a one-string `__slots__` iterated by character | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-One]` |
+| N7-P20 | a `__dict__` slot copied like any other | killed: `tests/test_copy_slots.py::test_a_declared_instance_dict_is_copied_not_shared[copy]` |
+| N8-P33 | bounds written in full up to 121 bits | killed: `tests/test_messages.py::test_bounds_past_120_bits_are_described_by_their_size` |
+| T1 | any attribute with `__get__` taken as a slot | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-Streamed]` |
+| T2 | the lock copied with the slots | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[deepcopy-Streamed]` |
+| T3 | only the leaf class searched | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-StreamedGauge]` |
+| T4 | the leaf class skipped | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-Streamed]` |
+| T5 | leading underscores stripped from the slot name | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-StreamedGauge]` |
+| T6 | the instance dictionary left out | killed: `tests/test_copy.py::test_a_subclass_without_slots_keeps_its_instance_attributes[copy]` |
