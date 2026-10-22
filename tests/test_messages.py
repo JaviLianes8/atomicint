@@ -105,6 +105,14 @@ def test_repr_writes_values_up_to_1800_bits_and_never_fails() -> None:
     )
 
 
+def test_repr_writes_bounds_up_to_1800_bits_in_full_too() -> None:
+    low, high = -(2**500), 2**1800 - 1
+    counter = BoundedAtomicInt(7, minimum=low, maximum=high, overflow="saturate")
+    assert repr(counter) == (
+        f"BoundedAtomicInt(7, minimum={low}, maximum={high}, overflow='saturate')"
+    )
+
+
 def test_huge_values_still_compute_exactly() -> None:
     counter = BoundedAtomicInt(HUGE, minimum=0, maximum=HUGE, overflow="wrap")
     assert counter.add(1) == 0
