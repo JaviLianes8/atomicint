@@ -86,23 +86,38 @@ def test_slot_names_given_as_a_hostile_str_subclass_are_kept(clone: Clone) -> No
     assert (clone(guarded).tag, clone(guarded)._Guarded__pv) == ("pink", "grey")
 
 
-class Replacing(AtomicInt):
-    __slots__ = ()
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        # A base hook may leave anything in __slots__ once the class is made.
-        type.__setattr__(cls, "__slots__", [1, "tag"])
-        super().__init_subclass__(**kwargs)
+class Unreadable:
+    def __iter__(self) -> Any:
+        raise RuntimeError("cannot be read again")
 
 
-class Replaced(Replacing):
-    __slots__ = ("tag",)
-    tag: str
+LEFTOVERS: dict[str, object] = {"a number": [1, "tag"], "an unreadable object": Unreadable()}
 
 
+def _replaced(label: str) -> Any:
+    class Replacing(AtomicInt):
+        __slots__ = ()
+
+        def __init_subclass__(cls, **kwargs: Any) -> None:
+            # A base hook may leave anything in __slots__ once the class is made.
+            type.__setattr__(cls, "__slots__", LEFTOVERS[label])
+            super().__init_subclass__(**kwargs)
+
+    made: Any = type("Replaced", (Replacing,), {"__slots__": ("tag",)})
+    made.__qualname__ = f"Replaced_{len(REPLACED)}"
+    globals()[made.__qualname__] = made
+    return made
+
+
+REPLACED: dict[str, Any] = {}
+for _label in LEFTOVERS:
+    REPLACED[_label] = _replaced(_label)
+
+
+@pytest.mark.parametrize("label", list(LEFTOVERS))
 @pytest.mark.parametrize("clone", CLONES, ids=CLONE_IDS)
-def test_a_non_str_left_in_slots_by_a_hook_is_skipped(clone: Clone) -> None:
-    original = Replaced(3)
+def test_whatever_a_hook_leaves_in_slots_is_skipped(clone: Clone, label: str) -> None:
+    original = REPLACED[label](3)
     original.tag = "blue"
     twin = clone(original)
     assert (twin.tag, twin.get()) == ("blue", 3)
