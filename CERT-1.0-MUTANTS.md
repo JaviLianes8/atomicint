@@ -105,3 +105,20 @@ The R mutants change `_commit.py`, `_atomic.py`, `_state.py`, `_bounded.py` and 
 | R20 | bounded add skips the range check under the lock | killed: `src/atomicint/__init__.py::atomicint` |
 | R21 | lower limit dropped from the range check | killed: `tests/test_bounded.py::test_raise_refuses_an_out_of_range_write_and_keeps_the_value[get_and_add-args2]` |
 | R22 | bounded compare never checks the new value | killed: `tests/test_bounded.py::test_raise_refuses_an_out_of_range_write_and_keeps_the_value[compare_and_set-args4]` |
+
+## After QA round 2
+
+The four survivors of the mutation lens and three mutants of the code changed in this
+round, each alone on a copy of the fixed tree, `tests` with `-x` and a 120 s per-test limit
+on this PC (CPython 3.13.2, Java 21.0.8 and Node.js present, fetched reference files
+absent, `ATOMICINT_E2E` unset). All killed, each by the contract added for it.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| X33 | out-of-range compare-and-set stops retrying once the policy was applied | killed: `tests/test_races.py::test_a_compare_and_set_that_loses_to_an_equal_write_still_stores[saturate-2000]` |
+| X31 | update function and policy run with the lock held | killed: `tests/test_update.py::test_the_function_runs_without_the_lock[update]` |
+| X62 | bounds in an `OverflowError` written in full up to 1800 bits | killed: `tests/test_messages.py::test_bounds_past_120_bits_are_described_by_their_size` |
+| X13 | `__weakref__` slot copied like any other | killed: `tests/test_copy.py::test_a_weakly_referenced_subclass_is_copied[copy]` |
+| Q01 | private slots of a `_`-only class name mangled anyway | killed: `tests/test_copy.py::test_a_private_slot_of_an_underscored_subclass_is_copied[copy-_]` |
+| Q02 | wrongly typed policy raises `ValueError` | killed: `tests/test_bounded.py::test_a_policy_that_is_not_a_plain_str_raises_type_error[raise]` |
+| Q03 | classes reported as `atomicint` again | killed: `tests/test_contract_api.py::test_the_classes_use_slots_and_name_the_module_that_defines_them` |

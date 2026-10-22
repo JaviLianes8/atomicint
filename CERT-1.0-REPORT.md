@@ -24,8 +24,8 @@ Progress:
 | # | Item | Result |
 | --- | --- | --- |
 | 1 | Public API reviewed for stability | PASS: the 3 names, 11 methods, 3 properties, parameter names and defaults of 0.2.0 kept and pinned (`tests/test_contract_api.py`); every change in CHANGELOG 1.0.0 |
-| 2 | `__all__` exact, no private imports in docs | PASS: `AtomicInt`, `BoundedAtomicInt`, `Overflow`; the classes report `atomicint` as their module |
-| 3 | Docstrings with runnable examples, doctests | PASS: 18 doctests (package, `Overflow`, both classes, every method and property); README (5 blocks) and GUIDE (9 blocks) examples run with their printed output checked |
+| 2 | `__all__` exact, no private imports in docs | PASS: `AtomicInt`, `BoundedAtomicInt`, `Overflow`; the classes keep the module that defines them, so tools find their source, and the paths pickles name are pinned |
+| 3 | Docstrings with runnable examples, doctests | PASS: 18 doctests (package, `Overflow`, both classes, every method and property); README (5 blocks) and GUIDE (9 blocks) examples run with their printed output checked, and pass `mypy --strict` |
 | 4 | Typed end to end | PASS: `mypy --strict src tests`, `py.typed`, revealed types and rejected misuse (`tests/test_typing.py`), a strict consumer type-checked against the installed wheel |
 | 5 | Typed, documented, bounded errors | PASS: built-in `TypeError`, `ValueError`, `OverflowError`, GUIDE error table, messages at most 200 characters for any input |
 | 6 | Contract tests of every public name | PASS |
@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract) |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed (see QA lenses); re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -226,3 +226,46 @@ Verification after the fixes:
 Commits of this round: 230f5d6 (lock discipline, index binding, docs, contracts), 7aaed46,
 69996f5, 0641a20, 98138e8 (range check under the lock), 0024069, 4f02eac, and the commit
 that records this section.
+
+### Round 2 (lenses a, c, d and e at 51e2af2)
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| a, d | F1, D1 | medium | Setting `__module__ = "atomicint"` on the classes (and their methods) broke source lookup: `inspect.getsource` raised `OSError` on 3.10 to 3.14t, `getsourcefile` named `__init__.py`, doctest reported the examples in `__init__.py` with no line | The rewrite is gone: the classes keep `atomicint._atomic` and `atomicint._bounded`. Pickles name those class paths and `copyreg.__newobj__` only (no helper function); 0.2.0 pickles already name the same paths, so they had to stay importable anyway, and the GUIDE and CHANGELOG now say they do for the whole 1.x series. Contracts: source file, class source, method source, and doctest file and line of every class and method; the pickle names; the e2e consumer calls `inspect.getsource` on the installed wheel |
+| a | F2 | low | The README update example (`lambda current, s=sample: ...`) failed `mypy --strict` ("Cannot infer type of lambda") | The example is `lambda current: max(current, sample)`. New `test_the_doc_examples_pass_strict_type_checking` runs `mypy --strict` over every README and GUIDE block; only the first line of a `try` block (a refused input written on purpose) may be an error |
+| a | F3 | low | A policy of the wrong type (`None`, `5`, a `str` subclass) raised `ValueError`, while every other wrongly typed argument raises `TypeError` | A policy that is not a plain `str` raises `TypeError` ("overflow must be a plain str, not NoneType"); an unknown string still raises `ValueError`. CHANGELOG "Changed" (the 1.0.0 summary names this one change of error type from 0.2.0), GUIDE bounded section and error table |
+| c | F1 | medium | With a trace, profile or monitoring hook installed, a finalizer or signal handler run by the hook between an operation's read and its store loses its update, which the GUIDE, the class docstring and the CHANGELOG promised could not happen | Documented, as no pure Python code can close it (a hook can run at any line or instruction): the GUIDE threads section has a "two limits" paragraph, the `AtomicInt` docstring and the CHANGELOG entry name the limit, and "runs no Python code" now reads "no Python code of its own". `tests/test_limits.py` pins the limit deterministically with the lens's tracer |
+| c | F2 | low | Copies and pickles of a subclass named only with underscores (`_`, `__`) dropped its private slots: the copy looked for `___tag`, Python keeps `__tag` | `slot_names` mangles only when the class name has something left after stripping underscores, as `copyreg._slotnames` does. Classes `_` and `__` added to the copy, deepcopy and pickle contract (red before, green after). CHANGELOG "Fixed" (0.2.0 had the same bug) |
+| c | F3 | low | On CPython 3.14 a `KeyboardInterrupt` that arrives just after `with lock:` took the lock leaves it held; other threads then wait forever | Documented in the GUIDE's "two limits" paragraph and the CHANGELOG, with what a program should do. The root cause is the 3.14 `with` statement (the lens's control leaked a bare `RLock` the same way); a mitigation would need private `RLock` methods and a call on every operation. `tests/test_limits.py` pins the behaviour with a lock that is interrupted right after it is taken |
+| e | F1-X33 | high | The retry loop of an out-of-range compare-and-set was not pinned: a mutant that reported success without storing, after losing a race to an equal-valued write, survived | `tests/test_races.py`: another thread's write lands exactly while the policy is applied outside the lock (through the policy step of a subclass): an equal value as a new object, a different value, and an out-of-range add, for saturate and wrap |
+| e | F2-X31 | medium | Nothing checked that update functions run outside the lock | `test_the_function_runs_without_the_lock`: while the function runs, another thread reads the counter, and its write makes the update retry, for `update` and `get_and_update` |
+| e | F3-X62 | medium | The 120-bit cut was not pinned for the bounds in an `OverflowError` | `test_bounds_past_120_bits_are_described_by_their_size`: both bounds, and a 120-bit bound written in full |
+| e | F4-X13 | low | Copying or pickling a subclass with a `__weakref__` slot was not pinned | `test_a_weakly_referenced_subclass_is_copied`, with a live weak reference, under copy, deepcopy and every pickle protocol |
+
+Lens a's evidence notes (`dir(atomicint)` showing `annotations`, `help()` showing the
+private bases) and lens d's process note need no change. The GUIDE's cost figures were not
+re-measured: this round changes no locked step and no operation path, only the
+constructor's policy check and the module attribute. No finding is disputed.
+
+Verification:
+
+- The new contracts were red on the code before each fix: the policy type (10 cases),
+  source lookup and module paths (2 tests), the pickle names (6 protocols), the underscore-only
+  class names (16 cases) and the doc type check.
+- Mutations, each alone on a copy of the fixed tree, CPython 3.13.2 on this PC with Java
+  21.0.8 and Node.js present, `tests` with `-x`, fetched reference files absent: X33, X31,
+  X62 and X13 from the lens, plus the mangling of `_`-only class names, `ValueError` for a
+  wrongly typed policy and the old `__module__` rewrite: all killed, each by the contract
+  added for it ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Gates at 046aaac on another machine from a fresh clone, CPython 3.14.2, fetched
+  reference files present, `ATOMICINT_E2E=1`: `ruff format --check .`, `ruff check .`,
+  `mypy --strict src`, `mypy --strict src tests` and `pytest` (434 passed, 7 skipped: the
+  two free-threading tests and the five Java oracle tests, no Java there) each exit 0.
+- The suite at 046aaac on every interpreter of this PC (Java 21 and Node.js present, e2e
+  off): 432 passed and 9 skipped on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2;
+  434 passed and 7 skipped on 3.14.2t with the GIL disabled.
+
+Commits of this round: 016f1ab (policy type), da6f468 (module and source lookup),
+1cb8697 (underscore-only class names), 3f82b99 (race and update contracts), e692e78
+(limits pinned, docstrings), 886c376 (doc type check, README example), 05e12ea
+(CHANGELOG and GUIDE), 046aaac (wheel e2e), and the commit that records this section.
