@@ -124,9 +124,9 @@ lists what changed in each release.
 
 ## Why atomicint
 
-The other atomic integer packages on PyPI are compiled extensions built for lock-free
-speed, and they store a fixed-width machine integer. Checked on 2026-10-22 against their
-PyPI releases:
+Most atomic integer packages on PyPI are compiled extensions built for lock-free speed,
+and they store a fixed-width machine integer. Checked on 2026-10-22 against their PyPI
+releases:
 
 - `atomicx` 0.0.15 (Rust): its `AtomicInt` is 64 bits wide; adding 1 to `2**63 - 1`
   silently gives `-2**63`.
@@ -138,12 +138,23 @@ PyPI releases:
   only.
 - `atomicity` 0.0.3 (Rust): describes itself as at a very early stage.
 
-`atomicint` takes the other trade. It is plain Python with one lock per counter, so it
-installs anywhere CPython 3.10+ runs, with or without the GIL, and holds integers of any
-size. Overflow is a choice you make per counter (raise, saturate or wrap at any range,
-not only at 64 bits). It is fully typed, checks its inputs, and every operation is tested
-for linearizability under contention and against Java's `AtomicLong` and JavaScript's
-`Atomics`.
+The pure Python ones are older and narrower (checked on 2026-10-23):
+
+- `atomos` 0.3.1 (last release July 2015, classifiers up to Python 3.4): its
+  `AtomicInteger` updates integers of any size under a lock, with `get_and_add` and
+  `compare_and_set`, but has no bounds or overflow policy and no type hints, and needs
+  `six` and `tox` installed at run time.
+- `fastcounter` 1.1.0 (June 2021): thread-safe counters with an `increment` method and a
+  value to read, and no compare-and-set.
+
+`atomicint` takes the other trade from the compiled packages and does more than the pure
+Python ones. It is plain Python with one lock per counter, so it installs anywhere
+CPython 3.10+ runs, with or without the GIL, and holds integers of any size. Overflow is
+a choice you make per counter (raise, saturate or wrap at any range, not only at 64
+bits). It is fully typed and checks its inputs. Every operation is tested
+for linearizability under contention, on a plain counter and under each overflow policy,
+and compared with Java's `AtomicLong`; the wrap and saturate policies are also compared
+with JavaScript's `Atomics` and typed arrays.
 
 The cost is speed: a lock per operation is slower than a hardware atomic instruction.
 If a counter sits on a hot path of a free-threaded program and 64-bit wraparound is what

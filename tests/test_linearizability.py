@@ -1,4 +1,4 @@
-"""Recorded concurrent histories of every operation are linearizable.
+"""Recorded concurrent histories of every operation are linearizable, under every policy.
 
 Threads run random operations on one counter while each call's start and end times are
 recorded. A history is linearizable when its operations can be put in one sequential
@@ -17,7 +17,7 @@ from typing import Any, NamedTuple
 
 import pytest
 
-from atomicint import AtomicInt, BoundedAtomicInt
+from atomicint import AtomicInt, BoundedAtomicInt, Overflow
 
 from ._helpers import run_threads, tight_switching
 
@@ -30,30 +30,54 @@ class Call(NamedTuple):
     result: Any
 
 
-def _step(call: Call, value: int, low: int, high: int) -> tuple[bool, int]:
+RAISED = "OverflowError"  # the result recorded for a call that raised it
+
+
+def _fit(new: int, low: int, high: int, policy: str) -> int | None:
+    # What the policy stores for new, or None when it refuses the write.
+    if low <= new <= high:
+        return new
+    if policy == "raise":
+        return None
+    if policy == "saturate":
+        return low if new < low else high
+    return low + (new - low) % (high - low + 1)
+
+
+def _target(name: str, args: tuple[int, ...], value: int) -> int | None:
+    # The value a call tries to write from value, or None when it writes nothing.
+    if name in ("set", "get_and_set"):
+        return args[0]
+    if name in ("add", "get_and_add", "update", "get_and_update"):
+        return value + args[0]
+    if name in ("increment", "decrement"):
+        return value + (1 if name == "increment" else -1)
+    if name.startswith("compare"):
+        return args[1] if value == args[0] else None
+    return None  # get
+
+
+def _step(call: Call, value: int, low: int, high: int, policy: str) -> tuple[bool, int]:
     """Whether ``call`` could have returned its result from ``value``, and the next value."""
-    name, args, result = call.name, call.args, call.result
-
-    def fit(new: int) -> int:
-        return low + (new - low) % (high - low + 1)
-
-    if name == "get":
-        return result == value, value
+    name, result = call.name, call.result
+    target = _target(name, call.args, value)
+    stored = value if target is None else _fit(target, low, high, policy)
+    if stored is None:  # refused: the call raised and the value stays
+        return result == RAISED, value
+    if result == RAISED:
+        return False, value
+    if name in ("add", "update", "increment", "decrement"):
+        return result == stored, stored
     if name == "set":
-        return result is None, fit(args[0])
-    if name in ("add", "update"):
-        return result == fit(value + args[0]), fit(value + args[0])
-    if name in ("get_and_add", "get_and_update"):
-        return result == value, fit(value + args[0])
-    if name == "get_and_set":
-        return result == value, fit(args[0])
-    swapped = fit(args[1]) if value == args[0] else value
+        return result is None, stored
     if name == "compare_and_set":
-        return result is (value == args[0]), swapped
-    return result == value, swapped  # compare_and_exchange
+        return result is (value == call.args[0]), stored
+    return result == value, stored  # get, get_and_*, compare_and_exchange
 
 
-def linearizable(history: list[Call], initial: int, low: int, high: int) -> bool:
+def linearizable(
+    history: list[Call], initial: int, low: int, high: int, policy: str = "wrap"
+) -> bool:
     full = (1 << len(history)) - 1
     seen: set[tuple[int, int]] = set()
 
@@ -68,7 +92,7 @@ def linearizable(history: list[Call], initial: int, low: int, high: int) -> bool
         for i in pending:
             if history[i].start > horizon:
                 continue  # another pending call ended before this one began
-            fits, after = _step(history[i], value, low, high)
+            fits, after = _step(history[i], value, low, high, policy)
             if fits and search(done | 1 << i, after):
                 return True
         return False
@@ -89,11 +113,30 @@ def test_the_checker_rejects_a_lost_update_and_a_stale_read() -> None:
     assert linearizable([Call(0, 3, "set", (5,), None), Call(2, 4, "get", (), 0)], 0, -9, 9)
 
 
+def test_the_checker_knows_each_policy() -> None:
+    # From 4 in 0..5, an increment then add(3): 5, then a raise, a clamp to 5 or a wrap to 2.
+    def history(second: object) -> list[Call]:
+        return [Call(0, 1, "increment", (), 5), Call(2, 3, "add", (3,), second)]
+
+    assert linearizable(history(RAISED), 4, 0, 5, "raise")
+    assert not linearizable(history(8), 4, 0, 5, "raise")
+    assert linearizable(history(5), 4, 0, 5, "saturate")
+    assert not linearizable(history(RAISED), 4, 0, 5, "saturate")
+    assert linearizable(history(2), 4, 0, 5, "wrap")
+    assert not linearizable(history(5), 4, 0, 5, "wrap")
+    # A refused write leaves the value: a later read must still see 5.
+    read = [*history(RAISED), Call(4, 5, "get", (), 5)]
+    assert linearizable(read, 4, 0, 5, "raise")
+    assert not linearizable([*read[:2], Call(4, 5, "get", (), 8)], 4, 0, 5, "raise")
+
+
 OPERATIONS = [
     "get",
     "set",
     "add",
     "get_and_add",
+    "increment",
+    "decrement",
     "get_and_set",
     "compare_and_set",
     "compare_and_exchange",
@@ -102,27 +145,40 @@ OPERATIONS = [
 ]
 
 
+def test_the_histories_draw_every_public_operation() -> None:
+    public = {name for name in vars(AtomicInt) if not name.startswith("_")}
+    assert set(OPERATIONS) == public
+
+
 def _random_call(counter: AtomicInt, rng: random.Random) -> Call:
     name = rng.choice(OPERATIONS)
-    a, b = rng.randint(-3, 3), rng.randint(-3, 3)
-    args: tuple[int, ...] = {"get": ()}.get(name, (a,) if "compare" not in name else (a, b))
+    # Deltas and expected values in -5..5, the bounded range; written values past it too.
+    a, b, c = rng.randint(-5, 5), rng.randint(-5, 5), rng.randint(-8, 8)
+    fixed: dict[str, tuple[int, ...]] = {"set": (c,), "get_and_set": (c,), "get": ()}
+    args = fixed.get(name, () if "crement" in name else (b, c) if "compare" in name else (a,))
     method = getattr(counter, name)
     start = time.perf_counter_ns()
-    result = method(lambda v: v + a) if "update" in name else method(*args)
+    try:
+        result = method(lambda v: v + a) if "update" in name else method(*args)
+    except OverflowError:
+        result = RAISED
     return Call(start, time.perf_counter_ns(), name, args, result)
 
 
-@pytest.mark.parametrize("bounded", [False, True])
-def test_every_recorded_history_is_linearizable(bounded: bool) -> None:
-    low, high = (-5, 5) if bounded else (-(10**9), 10**9)
-    rng = random.Random(11 + bounded)
-    checked = 0
+POLICIES: list[Overflow | None] = [None, "raise", "saturate", "wrap"]
+
+
+@pytest.mark.parametrize("policy", POLICIES)
+def test_every_recorded_history_is_linearizable(policy: Overflow | None) -> None:
+    low, high = (-(10**9), 10**9) if policy is None else (-5, 5)
+    rng = random.Random(f"linearizable {policy}")
+    checked = refused = 0
     with tight_switching():
         for _ in range(150):
             counter = (
-                BoundedAtomicInt(0, minimum=low, maximum=high, overflow="wrap")
-                if bounded
-                else AtomicInt(0)
+                AtomicInt(0)
+                if policy is None
+                else BoundedAtomicInt(0, minimum=low, maximum=high, overflow=policy)
             )
             logs: list[list[Call]] = [[] for _ in range(4)]
 
@@ -135,6 +191,8 @@ def test_every_recorded_history_is_linearizable(bounded: bool) -> None:
                 [functools.partial(worker, log, s) for log, s in zip(logs, seeds, strict=True)]
             )
             history = [call for log in logs for call in log]
-            assert linearizable(history, 0, low, high), history
+            assert linearizable(history, 0, low, high, policy or "raise"), history
             checked += 1
+            refused += sum(call.result == RAISED for call in history)
     assert checked == 150
+    assert (refused > 0) == (policy == "raise")  # the raise histories hold refused writes
