@@ -17,6 +17,8 @@ REPR_BITS = 1800
 MRO = vars(type)["__mro__"]
 NAMESPACE = vars(type)["__dict__"]
 _NAME = vars(type)["__name__"]
+# What _lookup returns for a name no class along the MRO holds: a class may hold None.
+_MISSING: Any = object()
 
 
 def as_int(value: SupportsIndex, name: str) -> int:
@@ -28,12 +30,13 @@ def as_int(value: SupportsIndex, name: str) -> int:
     if issubclass(cls, int):
         return operator.index(value)
     hook = _lookup(cls, "__index__")
-    if hook is None:
+    if hook is _MISSING or hook is None:
         raise TypeError(f"{name} must be an integer, not {kind(value)}")
     # Called here, bound as Python binds it, so a hook that answers True is caught;
     # operator.index would turn it into 1 with only a deprecation warning.
+    # A __get__ that is there is called, as Python calls it, even when it is None.
     bind = _lookup(type(hook), "__get__")
-    result = (hook if bind is None else bind(hook, value, cls))()
+    result = (hook if bind is _MISSING else bind(hook, value, cls))()
     kind_of_result = type(result)
     if kind_of_result is bool or not issubclass(kind_of_result, int):
         raise TypeError(f"{name} must be an integer, but its __index__ returned {kind(result)}")
@@ -47,13 +50,14 @@ def _lookup(cls: type, name: str) -> Any:
         namespace = NAMESPACE.__get__(klass)
         if name in namespace:
             return namespace[name]
-    return None
+    return _MISSING
 
 
 def class_name(cls: type) -> str:
     """The name Python keeps for ``cls``, whatever its metaclass answers for ``__name__``."""
-    name: str = _NAME.__get__(cls)
-    return name
+    # A plain copy: the name may be a str subclass, whose methods could raise or answer
+    # anything, while Python's own messages use the text it holds.
+    return str.__str__(_NAME.__get__(cls))
 
 
 def kind(value: object) -> str:

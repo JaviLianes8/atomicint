@@ -32,11 +32,16 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   itself accepts it; before, it raised a `TypeError` about its arguments. An object that
   claims to be an `int` through `__class__` is judged by its real type; before, its
   `__index__` could answer `True` past the `bool` check and store 1. The hook is bound
-  exactly as Python binds it, whatever the metaclass of the hook's own class says.
+  exactly as Python binds it, whatever the metaclass of the hook's own class says, and a
+  hook whose class sets `__get__` to `None` is refused with the `TypeError` Python raises
+  for it; before, such a hook was called unbound and its result stored.
 - Error messages and `repr()` use the name Python keeps for a class, as Python's own
-  messages do. Before, a metaclass that answers for `__name__` could turn the documented
-  `TypeError` into another exception or an unrelated message, or put its own text into
-  the message.
+  messages do, and a name given as a `str` subclass (by `type()` or by assigning
+  `__name__`) is read as the plain text it holds. Before, a metaclass that answers for
+  `__name__`, or a name whose `str` subclass overrides its methods, could turn the
+  documented `TypeError` into another exception or an unrelated message, put text of its
+  own (of any length) into the message, make `repr()` raise, or stop a subclass of the
+  counter from being made.
 - Copies and pickles of a subclass keep every slot Python created for it. Before, the
   copy read the names back from `__slots__` and mangled the private ones itself, so it
   silently left an attribute out when `__slots__` was an iterator (used up when the class

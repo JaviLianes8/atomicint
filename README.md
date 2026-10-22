@@ -142,8 +142,8 @@ The pure Python ones are older and narrower (checked on 2026-10-23):
 
 - `atomos` 0.3.1 (last release July 2015, classifiers up to Python 3.4): its
   `AtomicInteger` updates integers of any size under a lock, with `get_and_add` and
-  `compare_and_set`, but has no bounds or overflow policy and no type hints, and needs
-  `six` and `tox` installed at run time.
+  `compare_and_set`, but has no bounds or overflow policy and no type hints. It imports
+  `six` at run time and also lists `tox` as an install dependency, which it never imports.
 - `fastcounter` 1.1.0 (June 2021): thread-safe counters with an `increment` method and a
   value to read, and no compare-and-set.
 

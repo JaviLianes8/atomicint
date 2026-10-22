@@ -50,7 +50,8 @@ print(["a", "b", "c"][AtomicInt(2)])  # c
 Every value, amount, expected value, bound and update result must be an integer: an
 `int`, or an object with `__index__` (NumPy integers, another `AtomicInt`), found and
 called the way Python itself does it, so a `classmethod` or `staticmethod` `__index__`
-works too. The check uses an object's real type: one that claims to be an `int` through
+works too, and a hook whose class sets `__get__` to `None` is refused as Python refuses
+it. The check uses an object's real type: one that claims to be an `int` through
 `__class__` is not taken for one. Anything else raises `TypeError` before the counter is
 touched. In particular a float is never
 truncated, a string is never parsed, and `bool` is refused even though it is an `int`
@@ -185,7 +186,8 @@ All three are the built-in exceptions. No operation changes the value when it ra
 Messages stay short: an integer of more than 120 bits is written by its size, a class
 name is cut after 60 characters, and an unknown policy string after 40. The class name is
 the one Python keeps for the class (as in its own messages), whatever a metaclass answers
-for `__name__`; `repr()` uses it too.
+for `__name__`, and as the plain text it holds even when it is a `str` subclass; `repr()`
+uses it too.
 
 ```python
 from atomicint import BoundedAtomicInt
