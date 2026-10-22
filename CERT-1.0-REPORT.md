@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy) |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -414,3 +414,65 @@ Verification:
 Commits of this round: 28f1dd0 (slot names keyed by class, listed slots, covered bases,
 first-copy names, new contracts, CHANGELOG, GUIDE) and the commit that records this
 section.
+
+### Round 5 probes (lenses c and e at 54db276, interrupted)
+
+The round 5 re-check of lenses c and e at 54db276 stopped before either lens reported.
+Lens e's probe logs, left in its working folder, show two defects in the per-class slot
+names of 28f1dd0, and lens c's unfinished sweep script, run here against the first fix,
+found two more; all four are fixed here without waiting for the lenses to report them.
+Lens e's other probes (wrapped slots under classes named `_` and `__`, `__tag__`, dict, list and
+frozenset `__slots__`, a `__weakref__` or `__dict__` slot beside a wrapped one, 50 dynamic
+classes freed) kept every slot under copy and deepcopy on CPython 3.10.19 and 3.14.2; the
+pickle errors in those logs come from the probe's classes not being reachable by name.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| e | P6 | medium | A subclass whose metaclass defines `__eq__` without `__hash__` (so its classes are unhashable) could not be made at all: `__init_subclass__` used the class as a key of the `WeakKeyDictionary` and as a set member, and raised `TypeError`. 0.2.0 made and ran such a class | The table of names is a plain dict keyed by `id(cls)`, each entry holding a weak reference to its class whose callback removes the entry when the class dies (before CPython can reuse the id); a lookup also checks that the reference still points at the class. `_collect` tracks covered bases by id. `tests/test_class_identity.py::test_a_subclass_of_an_unhashable_metaclass_can_be_made_and_used` (both classes, a grandchild, the state handed to `copy` and `pickle`) |
+| e | P7 | medium | Two classes that a metaclass makes equal by name, with a matching hash, shared one entry, so the second class's copies used the first one's names and silently dropped a slot (a slot on its base, an iterator slot) | Fixed by the same change. `tests/test_class_identity.py::test_classes_equal_by_name_keep_their_own_slots` under copy, deepcopy and pickle protocols 0 to 5 |
+| c | Q07 | low | Found by running lens c's unfinished round 5 sweep (`sweep5.py`, no output of its own was left) against 692f501: a slot that a base's `__init_subclass__` wrapped before `super()` was dropped from copies when `__slots__` was a deque or a dict view, as only tuple, list, dict, set and frozenset were read again | `_listed` reads any `__slots__` again unless it is an iterator (`iter(x) is x`). `tests/test_slot_forms.py::test_a_wrapped_slot_is_kept_whatever_iterable_listed_it` (deque, `OrderedDict`, dict keys, a tuple subclass) under copy, deepcopy and every pickle protocol |
+| c | Q11 | low | Same sweep: a slot named by a `str` subclass whose `__eq__` raises made class creation fail (0.2.0 made the class and failed only at copy), and anything else a base's hook left in `__slots__` (a number, an object that cannot be iterated) failed the same way | Each listed name is read as a plain string through `str.__str__`, and what cannot be read again is skipped; the member scan still finds every slot Python created. `test_slot_names_given_as_a_hostile_str_subclass_are_kept` (tuple and one-string forms, and a wrapped one) and `test_whatever_a_hook_leaves_in_slots_is_skipped` |
+
+New contracts for the new table: `test_a_class_is_freed_and_its_id_reused_safely` (200
+classes that each die before the next is made, so CPython hands each new one the id of the
+last; every copy keeps its own slot, every class is freed, the table does not grow; under
+`AtomicInt`, `BoundedAtomicInt` and a base that skipped the hook) and
+`test_classes_alive_at_exit_leave_no_message` (classes held by a cycle at exit: the callbacks
+run during teardown and print nothing). CHANGELOG "Fixed" (slot entry) and the GUIDE copies
+section say the names are kept by the class's identity. No operation path changed, so the
+GUIDE's cost figures were not re-measured.
+
+Verification:
+
+- Red before the fix: the 54db276 `_state.py` with the new tests fails 18 cases (the two
+  equal-by-name cases under all 8 clones, and the unhashable test for both classes). With
+  the 692f501 `_state.py`, `tests/test_slot_forms.py` fails at collection (the hostile
+  `str` subclass and the left-over number raise at class creation); without those classes,
+  16 cases fail (deque and dict keys under all 8 clones).
+- The rest of the sweep on the fixed tree, CPython 3.13.2: unhashable and name-equal
+  metaclasses, a metaclass whose `__hash__` raises, 3000 dead classes freed with the table
+  back to its size, about 3990 id reuses with no slot lost, threads making, copying and
+  dropping classes under the collector, 1500 seeded random hierarchies: all kept. Its Q13
+  (a hook that puts a method's name in `__slots__`) fails exactly as the standard library
+  does for a plain class.
+- Mutants: 13 of the identity code, 11 killed, I1 and I6 equivalent on CPython; I7, run
+  against 861a812, showed a condition that could never be false, removed in 692f501. 9 of
+  the slot form code, 8 killed, L1 explained
+  ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Gates at 692f501 on another machine from a fresh clone, CPython 3.14.2, fetched reference
+  files present, `ATOMICINT_E2E=1`: all five exit 0 (803 passed, 7 skipped). Again at
+  90f1001 on a third machine, CPython 3.14.6, the same way: `ruff format --check .`,
+  `ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest` (859 passed,
+  7 skipped: the two free-threading tests and the five Java oracle tests, no Java there)
+  each exit 0. That run also showed that CPython 3.14.6 calls `__str__` on a `str`
+  subclass slot name while making the class, so the hostile name in the test overrides
+  only `__eq__` (90f1001).
+- The suite at 90f1001 from a fresh clone on every interpreter of this PC (Java 21 and
+  Node.js present, e2e off): 857 passed and 9 skipped on CPython 3.10.19, 3.11.5, 3.12.12,
+  3.13.2 and 3.14.2; 859 passed and 7 skipped on 3.14.2t with the GIL disabled. (At
+  692f501: 801 passed and 9 skipped, 803 and 7 on 3.14.2t.) Lens c's sweep on the fixed
+  tree is summarised above.
+
+Commits of this round: 861a812 (identity-keyed names, contracts, CHANGELOG, GUIDE), 692f501
+(callback simplified), fd5af23, 659f7ff, 3365d13 and 90f1001 (slot forms, contracts,
+CHANGELOG, GUIDE), and the commit that records this section.

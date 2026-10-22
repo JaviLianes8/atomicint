@@ -201,3 +201,51 @@ both.
 | R7 | covered bases not skipped | killed: `tests/test_copy_cost.py::test_making_a_class_costs_about_what_python_takes_whatever_the_depth` |
 | R8 | a listed `__dict__` taken for a slot | killed: `tests/test_copy_slots.py::test_a_declared_instance_dict_is_copied_not_shared[copy]` |
 | R9 | a dict `__slots__` not read again | killed: `[copy-Documented.tag]` |
+
+## After the identity fix (lens e's round 5 probes)
+
+The slot names of each class are now kept by the class's identity (`id()` and a weak
+reference whose callback removes the entry when the class dies), not in a
+`WeakKeyDictionary`, and `_collect` tracks covered bases by id. Each `_state.py` mutant
+below was applied alone to a copy of the fixed tree at 692f501 and run with `-x` against
+the identity, class hook, copy, copy cost and API tests on another machine (CPython 3.14.2).
+11 of 13 are killed; I1 and I6 are equivalent on CPython, as explained in their rows.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| I1 | `_known` returns any entry found under the id, without checking its reference | equivalent: the callback removes a dead class's entry before CPython can reuse its memory, so the entry found under a live class's id is always that class's; the check stays as a guard on the read path |
+| I2 | the weak reference callback removes nothing | killed: `tests/test_class_identity.py::test_a_class_is_freed_and_its_id_reused_safely[AtomicInt]` |
+| I3 | the table holds the class itself instead of a weak reference | killed: `tests/test_class_identity.py::test_a_class_is_freed_and_its_id_reused_safely[AtomicInt]` |
+| I4 | entries keyed by `hash(cls)` | killed: `tests/test_class_identity.py::test_a_subclass_of_an_unhashable_metaclass_can_be_made_and_used[AtomicInt]` |
+| I5 | covered bases kept in a set of classes | killed: `tests/test_class_identity.py::test_a_subclass_of_an_unhashable_metaclass_can_be_made_and_used[AtomicInt]` |
+| I6 | the reference compared with `==` instead of `is` | equivalent, for the reason given for I1 |
+| I8 | names worked out at a first copy not kept | killed: `tests/test_class_hooks.py::test_under_a_base_that_skipped_the_hook_the_names_are_kept_from_the_first_copy` |
+| I9 | `_collect` looks up the copied class instead of each base | killed: `tests/test_copy_slots.py::test_inherited_and_wrapped_slots_are_kept[copy-WrappedChild]` |
+| I10 | a stored tuple covers only its own class | killed: `tests/test_copy_cost.py::test_making_a_class_costs_about_what_python_takes_whatever_the_depth` |
+| I11 | the covered test inverted | killed: `tests/test_class_identity.py::test_classes_equal_by_name_keep_their_own_slots[copy-Same_2.z]` |
+| I12 | `_known` never finds anything | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-Checked.tag]` |
+| I13 | the callback clears the whole table | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-Checked.tag]` |
+| I14 | `Copyable.__init_subclass__` keeps no names | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-Checked.tag]` |
+
+I7 (the callback removing the entry only when it still holds the callback's own
+reference) was run against 861a812 and survived: a reference replaced by a later `_keep`
+of the same class is dropped and its callback never runs, so the condition could not be
+false. 692f501 removed it.
+
+The identity mutants were run again at 3365d13 on a third machine (CPython 3.14.6), with
+the same results. The slot form fix (`_listed` reads any `__slots__` that is not an
+iterator, takes each name through `str.__str__` and skips what cannot be read) was
+mutated the same way at 90f1001, with `tests/test_slot_forms.py` added to the run. 8 of 9
+are killed; L1 survives, as explained in its row.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| L1 | the iterator check removed | survives: Python uses up a `__slots__` iterator when it makes the class, so reading it again yields nothing; the only difference is that an iterator a base's hook put in `__slots__` afterwards would be used up, which no copy observes. The check stays so that attribute is left untouched |
+| L2 | each name taken as given instead of through `str.__str__` | killed: `tests/test_slot_forms.py::test_slot_names_given_as_a_hostile_str_subclass_are_kept[copy]` |
+| L3 | errors while reading `__slots__` not caught | killed: `tests/test_slot_forms.py` fails at collection (`TypeError` for the number a hook left) |
+| L4 | a one-string `__slots__` iterated character by character | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-_Hidden._Hidden__tag]` |
+| L5 | only tuple, list, dict, set and frozenset read again | killed: `tests/test_slot_forms.py::test_a_wrapped_slot_is_kept_whatever_iterable_listed_it[copy-deque]` |
+| L6 | only `TypeError` caught | killed: `tests/test_slot_forms.py` fails at collection (`RuntimeError` from the unreadable object) |
+| L7 | a listed `__dict__` taken for a slot | killed: `tests/test_copy_slots.py::test_a_declared_instance_dict_is_copied_not_shared[copy]` |
+| L8 | private names mangled with the class name as is | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-_Hidden._Hidden__tag]` |
+| L9 | the loop reads `__slots__` itself, not the one-string tuple | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-_Hidden._Hidden__tag]` |
