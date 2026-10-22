@@ -18,9 +18,9 @@ for the whole 1.x series. Semantic Versioning applies from here on.
   CPython runs such code in the middle of whatever the thread is doing; before, if it
   interrupted an operation on the same counter, the program hung forever, because the
   operation was holding the counter's lock while it ran Python code (range checks,
-  messages, copies). Now no Python code runs while the lock is held: inputs, range
-  checks, messages and update functions are all computed outside it, the new value is
-  stored only if the one it was computed from is still there, and the lock is
+  messages, copies). Now no Python code runs while the lock is held: inputs, overflow
+  policies, messages and update functions are all computed outside it, a value computed
+  there is stored only if the one it was computed from is still there, and the lock is
   reentrant. The interrupted operation finishes and neither update is lost.
 - An `__index__` defined as a `classmethod` or `staticmethod` is accepted, as Python
   itself accepts it; before, it raised a `TypeError` about its arguments. An object that
