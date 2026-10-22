@@ -10,7 +10,7 @@ import pytest
 
 from atomicint import AtomicInt
 
-from .test_class_hooks import Validating
+from .test_class_hooks import Validating, _wrap
 from .test_copy_slots import CLONE_IDS, CLONES, Clone
 
 NAMES = ("tag", "__pv")
@@ -56,8 +56,19 @@ class Touchy(str):
         raise RuntimeError("formatted")
 
 
+class Plainly(AtomicInt):
+    __slots__ = ()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        # Wraps the new slots first, as Validating does, reading the names as plain strings.
+        for name in map(str.__str__, vars(cls)["__slots__"]):
+            _wrap(cls, f"_{cls.__name__}{name}" if name.startswith("__") else name)
+        super().__init_subclass__(**kwargs)
+
+
 Odd: Any = type("Odd", (AtomicInt,), {"__slots__": (Touchy("tag"), Touchy("__pv"))})
 Lone: Any = type("Lone", (AtomicInt,), {"__slots__": Touchy("tag")})
+Guarded: Any = type("Guarded", (Plainly,), {"__slots__": [Touchy("tag"), Touchy("__pv")]})
 
 
 @pytest.mark.parametrize("clone", CLONES, ids=CLONE_IDS)
@@ -70,6 +81,9 @@ def test_slot_names_given_as_a_hostile_str_subclass_are_kept(clone: Clone) -> No
     lone = Lone(5)
     lone.tag = "green"
     assert (clone(lone).tag, clone(lone).get()) == ("green", 5)
+    guarded = Guarded(6)  # its slots were wrapped before the counter's hook ran
+    guarded.tag, guarded._Guarded__pv = "pink", "grey"
+    assert (clone(guarded).tag, clone(guarded)._Guarded__pv) == ("pink", "grey")
 
 
 class Replacing(AtomicInt):
