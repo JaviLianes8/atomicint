@@ -17,9 +17,12 @@ def slot_names(cls: type) -> list[str]:
     names: list[str] = []
     for klass in cls.__mro__:
         declared = klass.__dict__.get("__slots__", ())
+        # Python mangles with the class name stripped of leading underscores, and not at
+        # all when nothing is left (a class named "_" keeps "__tag" as it is).
+        stem = klass.__name__.lstrip("_")
         for name in (declared,) if isinstance(declared, str) else declared:
-            if name.startswith("__") and not name.endswith("__"):
-                name = f"_{klass.__name__.lstrip('_')}{name}"
+            if stem and name.startswith("__") and not name.endswith("__"):
+                name = f"_{stem}{name}"
             if name not in _SKIPPED:
                 names.append(name)
     return names

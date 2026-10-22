@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import pickle
 import threading
+import weakref
 from collections.abc import Callable
 from typing import Any
 
@@ -121,6 +122,36 @@ class _Private(AtomicInt):
         return self.__tag
 
 
+class _(AtomicInt):
+    """A class name of underscores only: Python does not mangle its private names at all."""
+
+    __slots__ = ("__tag",)
+
+    def __init__(self, value: int, tag: str) -> None:
+        super().__init__(value)
+        self.__tag = tag
+
+    @property
+    def tag(self) -> str:
+        return self.__tag
+
+
+class __(BoundedAtomicInt):
+    __slots__ = ("__tag",)
+
+    def __init__(self, value: int, tag: str) -> None:
+        super().__init__(value, maximum=9)
+        self.__tag = tag
+
+    @property
+    def tag(self) -> str:
+        return self.__tag
+
+
+class Tracked(AtomicInt):
+    __slots__ = ("__weakref__",)
+
+
 def _pickled(protocol: int) -> Clone:
     return lambda counter: pickle.loads(pickle.dumps(counter, protocol=protocol))
 
@@ -128,10 +159,21 @@ def _pickled(protocol: int) -> Clone:
 PROTOCOLS = [_pickled(protocol) for protocol in range(pickle.HIGHEST_PROTOCOL + 1)]
 
 
+@pytest.mark.parametrize("cls", [_Private, _, __])
 @pytest.mark.parametrize("clone", [copy.copy, copy.deepcopy, *PROTOCOLS])
-def test_a_private_slot_of_an_underscored_subclass_is_copied(clone: Clone) -> None:
-    twin = clone(_Private(3, "blue"))
-    assert (type(twin), twin.tag, twin.get()) == (_Private, "blue", 3)
+def test_a_private_slot_of_an_underscored_subclass_is_copied(clone: Clone, cls: Any) -> None:
+    twin = clone(cls(3, "blue"))
+    assert (type(twin), twin.tag, twin.get()) == (cls, "blue", 3)
+
+
+@pytest.mark.parametrize("clone", [copy.copy, copy.deepcopy, *PROTOCOLS])
+def test_a_weakly_referenced_subclass_is_copied(clone: Clone) -> None:
+    original = Tracked(3)
+    alive = weakref.ref(original)
+    twin = clone(original)
+    assert (type(twin), twin.get(), twin.increment(), original.get()) == (Tracked, 3, 4, 3)
+    assert alive() is original
+    assert weakref.ref(twin)() is twin
 
 
 @pytest.mark.parametrize("clone", CLONES)
