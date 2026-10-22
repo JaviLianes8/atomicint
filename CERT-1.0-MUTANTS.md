@@ -148,3 +148,23 @@ code fails anyway); the rest were applied to the fixed tree.
 | T4 | the leaf class skipped | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-Streamed]` |
 | T5 | leading underscores stripped from the slot name | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[copy-StreamedGauge]` |
 | T6 | the instance dictionary left out | killed: `tests/test_copy.py::test_a_subclass_without_slots_keeps_its_instance_attributes[copy]` |
+
+## After QA round 3
+
+The fix of lens c's F5 to F7 stores each class's slot names when the class is made. Each
+mutant below was applied alone to a copy of the fixed tree and run with `-x` against the
+copy and lock-call tests on this PC (CPython 3.13.2). V01, V04, V06, M02 and M19 are lens
+e's survivors from round 3.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| V01 | in-range compare written `if bool(seen == wanted):` | killed: `tests/test_lock_calls.py::test_no_operation_makes_a_call_while_it_holds_the_lock[cas_won-plain]` |
+| V04 | `_store` writes `int(new)` | killed: `tests/test_lock_calls.py::test_no_operation_makes_a_call_while_it_holds_the_lock[set-plain]` |
+| V06 | `_apply` reads `int(self._value)` under the lock | killed: `tests/test_lock_calls.py::test_no_operation_makes_a_call_while_it_holds_the_lock[update-plain]` |
+| M02 | only the class and its direct bases searched | killed: `tests/test_copy_slots.py::test_inherited_and_wrapped_slots_are_kept[copy-QuietLeaf]` |
+| M19 | slots restored through the subclass's `setattr` | killed: `tests/test_copy_slots.py::test_a_copy_is_rebuilt_past_the_subclass_setattr[copy]` |
+| S1 | class dictionaries read without a copy | killed: `tests/test_copy_cost.py::test_a_copy_is_safe_while_another_thread_changes_the_class[copy-Unhooked]` |
+| S2 | names not stored when the class is made | killed: `tests/test_copy_slots.py::test_inherited_and_wrapped_slots_are_kept[copy-Wrapped]` |
+| S3 | stored names ignored, worked out on every copy | equivalent: the walk starts at the class's own stored tuple, so the names are the same and only a constant cost is added |
+| S4 | the lock copied with the slots | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[deepcopy-Streamed]` |
+| S5 | the bases' stored names ignored when a class is made | killed: `tests/test_copy_slots.py::test_inherited_and_wrapped_slots_are_kept[copy-WrappedChild]` |

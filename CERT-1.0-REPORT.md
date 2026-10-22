@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -316,3 +316,46 @@ Verification:
 
 Commits of this round: 7b09994 (slot lookup from the member descriptors, CHANGELOG,
 GUIDE), 729224f (lock-call and 121-bit contracts), and the commit that records this section.
+
+### Round 3 (lenses c and e at 90eab2e)
+
+Lens c confirmed its F4 fixed at 90eab2e on all six interpreters and found three new
+defects in the slot lookup that 7b09994 introduced. Lens e confirmed all eight findings of
+its re-check fixed, proved four of its survivors equivalent (M05, M09, M10, M12) and
+reported three gaps in the contracts.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| c | F4 | low | Re-check: iterator `__slots__` kept through copy, deepcopy and pickle | Nothing to change; still pinned by the `Streamed` cases |
+| c | F5 | medium | `slot_names` iterated the live dictionary of every class in the MRO on each copy, so a copy raised an undocumented `RuntimeError` while another thread set or deleted a class attribute, and on 3.14t could lose a slot | A class's slot names are worked out once, when the class is made (`Copyable.__init_subclass__`), and stored on the class; a copy reads that tuple and iterates no class dictionary. Where the names must still be worked out at copy time (a subclass of a class whose `__init_subclass__` skips `super()`), each dictionary is copied before it is read. Contract `tests/test_copy_cost.py::test_a_copy_is_safe_while_another_thread_changes_the_class`: two threads copy (copy, deepcopy, pickle) for 1 s while a third sets and deletes class attributes, for a plain subclass and one under a base that skipped the hook; no error and no slot missing |
+| c | F6 | low | A slot whose member descriptor was replaced on the class by a wrapping property was silently dropped from copies, deep copies and pickles | Fixed by the same change: the names are fixed before any wrapper can replace a descriptor. Cases `Wrapped` and `WrappedChild` (a subclass made after the wrap) in `tests/test_copy_slots.py::test_inherited_and_wrapped_slots_are_kept` |
+| c | F7 | low | De-duplication searched a list inside the loop over slots: one copy cost O(slots squared), 305 ms for 8000 slots | Names collected into a dict and stored per class, so a copy is one pass over the stored names. `test_a_copy_costs_about_what_the_standard_copy_of_a_plain_class_costs`: with 8000 slots, a copy must take less than 10 times `copy.copy` of a plain class with the same slots (161.7 times at 90eab2e, about 1 now) |
+| e | F1-V01-V04-V06 | medium | A call of a type (`int(...)`, `bool(...)`) under the lock broke the finalizer and signal handler promise and survived the suite: the profile hook of `test_lock_calls.py` does not see calls of types | `tests/test_lock_calls.py` also records the `sys.monitoring` CALL events on 3.12 and later, which fire for every call, types included (the lock's own `__exit__` is the one call allowed). Deterministic, so it was chosen over the timing-based signal probe. 3.10 and 3.11 have no such API and keep the profile hook alone; the interpreter matrix of every certification run includes 3.12 to 3.14t |
+| e | F2-M02 | low | Nothing pinned a slot declared two or more levels above the copied class | Cases `Leaf` (slot two levels up) and `QuietLeaf` (two levels up, past a base that skipped the hook) for every clone, and `test_a_grandchild_keeps_its_bounds_and_policy` (a grandchild of `BoundedAtomicInt`: value, bounds, policy, repr). With names stored per class, the M02 mutation in `_collect` changes the result only on the fallback path, so `QuietLeaf` is the case that kills it |
+| e | F3-M19 | low | Nothing pinned that a copy is rebuilt past a subclass's own `__setattr__` | `test_a_copy_is_rebuilt_past_the_subclass_setattr`: a subclass whose `__setattr__` refuses its slot after construction, under copy, deepcopy and every pickle protocol |
+
+Lens e's summary entry needs no change. CHANGELOG "Fixed" (slot entry) and the GUIDE copies
+section now say the names are read once when the class is made, that a wrapped slot is
+still copied and that a copy is safe while another thread changes the class. The GUIDE's
+cost figures were not re-measured: no operation path changed. No finding is disputed.
+
+Verification:
+
+- Red before the fix: the 90eab2e `_state.py` with the new tests fails 23 cases (16 for
+  `Wrapped` and `WrappedChild` under copy, deepcopy and pickle protocols 0 to 5, the 6
+  race cases, the cost test). The lens's probes on the fixed tree: `p21_class_dict_race.py`
+  0 errors on 3.13.2 (84837 copies) and 3.14.2t (81570), `p12_wrapped_slot.py` keeps
+  `primary`, `p22_scaling.py` 1.80 ms per copy at 8000 slots.
+- Mutants, each alone on a copy of the fixed tree, CPython 3.13.2 on this PC: V01, V04,
+  V06, M02 and M19 from the lens and four of the new code (S1, S2, S4, S5), all killed;
+  a fifth of the new code (S3) is equivalent (see CERT-1.0-MUTANTS.md).
+- Gates at 04d028d on another machine from a clone, CPython 3.14.2, fetched reference
+  files present, `ATOMICINT_E2E=1`: `ruff format --check .`, `ruff check .`,
+  `mypy --strict src`, `mypy --strict src tests` and `pytest` (637 passed, 7 skipped: the
+  two free-threading tests and the five Java oracle tests, no Java there) each exit 0.
+- The suite at 04d028d on every interpreter of this PC (e2e off): 635 passed and 9 skipped
+  on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2; 637 passed and 7 skipped on
+  3.14.2t with the GIL disabled.
+
+Commits of this round: 04d028d (slot names stored per class, lock-call monitoring, new
+contracts, CHANGELOG, GUIDE) and the commit that records this section.
