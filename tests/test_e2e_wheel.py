@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 PROGRAM = r"""
-import copy, importlib.metadata, importlib.resources, pickle, sys, threading
+import copy, importlib.metadata, importlib.resources, inspect, pickle, sys, threading
 import atomicint
 from atomicint import AtomicInt, BoundedAtomicInt
 
@@ -55,7 +55,11 @@ wrap = BoundedAtomicInt(255, minimum=0, maximum=255, overflow="wrap")
 assert wrap.increment() == 0
 twin = pickle.loads(pickle.dumps(wrap))
 assert repr(twin) == repr(wrap) and twin is not wrap
-assert b"atomicint._" not in pickle.dumps(wrap)
+data = pickle.dumps(wrap)
+assert b"atomicint._bounded" in data and b"_blank" not in data
+for cls in (AtomicInt, BoundedAtomicInt):
+    assert "site-packages" in inspect.getsourcefile(cls)
+    assert inspect.getsource(cls).startswith(f"class {cls.__name__}(")
 assert copy.deepcopy(counter).get() == 2000
 print("e2e ok")
 """
