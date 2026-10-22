@@ -36,7 +36,10 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   copy read the names back from `__slots__` and mangled the private ones itself, so it
   silently left an attribute out when `__slots__` was an iterator (used up when the class
   was made), when the class was renamed after it was made, or when its name was only
-  underscores (such as `_`), where Python does not mangle `__tag` at all.
+  underscores (such as `_`), where Python does not mangle `__tag` at all. Now the names
+  are the slots Python created, read once when the class is made: a slot whose descriptor
+  is later replaced by a wrapper is still copied, and a copy never reads the class
+  dictionary, so it is safe while another thread changes the class.
 
 ### Changed
 

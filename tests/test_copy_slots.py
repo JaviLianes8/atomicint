@@ -105,3 +105,92 @@ def test_a_declared_instance_dict_is_copied_not_shared(clone: Clone) -> None:
     assert (original.note, twin.note) == ("a", "b")  # type: ignore[attr-defined]
     assert vars(twin) is not vars(original)
     assert twin.get() == 3
+
+
+class Plain(AtomicInt):
+    __slots__ = ("tag",)
+
+
+class Mid(Plain):
+    __slots__ = ()
+
+
+class Leaf(Mid):  # the slot is declared two levels up
+    __slots__ = ()
+
+
+class Quiet(AtomicInt):
+    __slots__ = ("tag",)
+
+    def __init_subclass__(cls) -> None:
+        pass  # no super() call: its subclasses are made without the base's class hook
+
+
+class QuietMid(Quiet):
+    __slots__ = ()
+
+
+class QuietLeaf(QuietMid):  # the slot is two levels up, past a class that skipped the hook
+    __slots__ = ()
+
+
+class Wrapped(AtomicInt):
+    __slots__ = ("tag",)
+    tag: str
+
+
+# A common wrapper: the slot's descriptor on the class is replaced by a property that
+# calls it (to validate or log), after the class was made.
+_raw = Wrapped.__dict__["tag"]
+type.__setattr__(Wrapped, "tag", property(_raw.__get__, _raw.__set__))
+
+
+class WrappedChild(Wrapped):  # made after the wrapper replaced its base's descriptor
+    __slots__ = ()
+
+
+@pytest.mark.parametrize(
+    ("cls", "name"),
+    [(Leaf, "tag"), (QuietLeaf, "tag"), (Wrapped, "tag"), (WrappedChild, "tag")],
+    ids=["Leaf", "QuietLeaf", "Wrapped", "WrappedChild"],
+)
+@pytest.mark.parametrize("clone", CLONES, ids=CLONE_IDS)
+def test_inherited_and_wrapped_slots_are_kept(
+    clone: Clone, cls: type[AtomicInt], name: str
+) -> None:
+    test_every_declared_slot_is_kept(clone, cls, name)
+
+
+class Gauge(BoundedAtomicInt):
+    __slots__ = ()
+
+
+class Dial(Gauge):
+    __slots__ = ()
+
+
+@pytest.mark.parametrize("clone", CLONES, ids=CLONE_IDS)
+def test_a_grandchild_keeps_its_bounds_and_policy(clone: Clone) -> None:
+    twin = clone(Dial(5, minimum=0, maximum=9, overflow="wrap"))
+    assert repr(twin) == "Dial(5, minimum=0, maximum=9, overflow='wrap')"
+    assert (type(twin), twin.minimum, twin.maximum, twin.overflow) == (Dial, 0, 9, "wrap")
+    assert twin.add(7) == 2
+
+
+class Frozen(AtomicInt):
+    __slots__ = ("tag",)
+
+    def __init__(self, value: int, tag: str) -> None:
+        super().__init__(value)
+        object.__setattr__(self, "tag", tag)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name == "tag":
+            raise AttributeError("tag is read-only")
+        super().__setattr__(name, value)
+
+
+@pytest.mark.parametrize("clone", CLONES, ids=CLONE_IDS)
+def test_a_copy_is_rebuilt_past_the_subclass_setattr(clone: Clone) -> None:
+    twin = clone(Frozen(3, "blue"))
+    assert (type(twin), twin.tag, twin.get(), twin.increment()) == (Frozen, "blue", 3, 4)
