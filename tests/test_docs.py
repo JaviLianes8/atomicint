@@ -1,4 +1,4 @@
-"""The README examples run and print what their comments say; versions agree."""
+"""The README and GUIDE examples run and print what their comments say; docs agree."""
 
 from __future__ import annotations
 
@@ -7,15 +7,22 @@ import io
 import re
 from pathlib import Path
 
+import pytest
+
 import atomicint
 from atomicint import AtomicInt, BoundedAtomicInt
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+GUIDE = (ROOT / "GUIDE.md").read_text(encoding="utf-8")
+BADGE = (
+    "[![Lianes8 Certified](https://lianes8studio.com/certified/lianes8-certified-badge.svg)]"
+    "(https://lianes8studio.com/certified)"
+)
 
 
-def _python_blocks() -> list[str]:
-    return re.findall(r"```python\n(.*?)```", README, flags=re.DOTALL)
+def _python_blocks(text: str) -> list[str]:
+    return re.findall(r"```python\n(.*?)```", text, flags=re.DOTALL)
 
 
 def _expected_prints(block: str) -> list[str]:
@@ -23,21 +30,17 @@ def _expected_prints(block: str) -> list[str]:
     return re.findall(r"^\s*print\(.*\)  # (.+)$", block, flags=re.MULTILINE)
 
 
-def test_the_readme_has_examples() -> None:
-    assert len(_python_blocks()) >= 7
-
-
-def test_every_readme_example_runs_and_prints_its_comment() -> None:
-    checked = 0
-    for block in _python_blocks():
+@pytest.mark.parametrize(("name", "minimum"), [("README", 5), ("GUIDE", 8)])
+def test_every_example_runs_and_prints_its_comments(name: str, minimum: int) -> None:
+    blocks = _python_blocks(README if name == "README" else GUIDE)
+    assert len(blocks) >= minimum
+    for block in blocks:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            exec(compile(block, "README.md", "exec"), {"__name__": "readme"})
+            exec(compile(block, f"{name}.md", "exec"), {"__name__": name.lower()})
         expected = _expected_prints(block)
         assert expected, block
         assert out.getvalue().splitlines() == expected
-        checked += len(expected)
-    assert checked >= 25
 
 
 def test_the_readme_api_table_lists_every_public_name_and_method() -> None:
@@ -48,6 +51,15 @@ def test_the_readme_api_table_lists_every_public_name_and_method() -> None:
     methods |= {n for n in vars(BoundedAtomicInt) if not n.startswith("_")}
     for method in methods:
         assert re.search(rf"`{method}\b", table), method
+        assert f"`{method}" in GUIDE, method
+
+
+def test_the_readme_carries_the_badge_and_absolute_links_only() -> None:
+    assert README.splitlines()[2] == BADGE
+    for target in re.findall(r"\]\(([^)]+)\)", README):
+        assert target.startswith("https://"), target
+    for page in ("GUIDE.md", "CHANGELOG.md", "LICENSE"):
+        assert f"https://github.com/JaviLianes8/atomicint/blob/main/{page}" in README, page
 
 
 def test_version_matches_pyproject() -> None:
@@ -57,17 +69,28 @@ def test_version_matches_pyproject() -> None:
     assert match.group(1) == atomicint.__version__
 
 
-def test_changelog_has_an_entry_for_this_version() -> None:
+def test_changelog_has_a_dated_entry_for_this_version() -> None:
     text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert f"## [{atomicint.__version__}]" in text
+    pattern = rf"^## \[{re.escape(atomicint.__version__)}\] - \d{{4}}-\d{{2}}-\d{{2}}$"
+    assert re.search(pattern, text, flags=re.MULTILINE)
 
 
-def test_no_em_dash_in_shipped_text() -> None:
-    paths = [ROOT / "README.md", ROOT / "CHANGELOG.md", *ROOT.joinpath("src").rglob("*.py")]
-    for path in paths:
+def _own_files() -> list[Path]:
+    upstream = ROOT / "tests" / "upstream"
+    found = [ROOT / name for name in ("README.md", "GUIDE.md", "CHANGELOG.md", "pyproject.toml")]
+    for folder in ("src", "tests", "scripts"):
+        for path in ROOT.joinpath(folder).rglob("*"):
+            if path.is_file() and upstream not in path.parents and "__pycache__" not in path.parts:
+                found.append(path)
+    return found
+
+
+def test_no_em_dash_anywhere() -> None:
+    for path in _own_files():
         assert chr(0x2014) not in path.read_text(encoding="utf-8"), path
 
 
 def test_source_files_stay_under_two_hundred_lines() -> None:
-    for path in [*ROOT.joinpath("src").rglob("*.py"), *ROOT.joinpath("tests").rglob("*.py")]:
-        assert len(path.read_text(encoding="utf-8").splitlines()) <= 200, path
+    for path in _own_files():
+        if path.suffix in (".py", ".js", ".java"):
+            assert len(path.read_text(encoding="utf-8").splitlines()) <= 200, path

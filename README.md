@@ -1,8 +1,20 @@
 # atomicint
 
+[![Lianes8 Certified](https://lianes8studio.com/certified/lianes8-certified-badge.svg)](https://lianes8studio.com/certified)
+
 Thread-safe atomic integers for Python: get, set, add, fetch-and-add, compare-and-set,
-compare-and-exchange, atomic update functions and a bounded variant that raises,
-saturates or wraps. Zero dependencies, fully typed, safe on free-threaded CPython.
+compare-and-exchange, atomic update functions, and a bounded counter that raises,
+saturates or wraps. Pure Python, zero dependencies, fully typed, safe on free-threaded
+CPython.
+
+## The problem
+
+CPython makes a single read or write of an `int` atomic, but a read-modify-write such as
+`x += 1` is not: two threads can read the same value and one increment is lost. The
+Python FAQ lists `i = i+1` among the operations that are not atomic and says "When in
+doubt, use a mutex!". So every project writes the same small class around a
+`threading.Lock`, and the retry loops built on top of it (high-water marks,
+compare-and-set, capped or wrapping counters) are easy to get wrong.
 
 ## Install
 
@@ -10,7 +22,9 @@ saturates or wraps. Zero dependencies, fully typed, safe on free-threaded CPytho
 pip install atomicint
 ```
 
-## Usage
+Python 3.10 or newer, any platform. Nothing to compile.
+
+## Quick start
 
 ```python
 from atomicint import AtomicInt
@@ -18,53 +32,28 @@ from atomicint import AtomicInt
 counter = AtomicInt(0)
 print(counter.increment())  # 1
 print(counter.add(10))  # 11
-print(counter.decrement())  # 10
-print(counter.get_and_add(5))  # 10
-print(counter.get())  # 15
-print(counter.get_and_set(99))  # 15
+print(counter.get_and_add(5))  # 11
+print(counter.get())  # 16
+print(counter.get_and_set(99))  # 16
 print(int(counter))  # 99
 ```
 
-Every value must be a real integer. Floats, strings and `bool` raise `TypeError` instead
-of being truncated or parsed; integer-like objects such as NumPy integers are accepted.
-Type checkers treat `bool` as an integer, so that one is caught at run time only.
+Compare-and-set swaps only when the value is what you expect; compare-and-exchange
+returns the value it saw, so a failed attempt already tells you what to retry with.
 
 ```python
 from atomicint import AtomicInt
-
-counter = AtomicInt(1)
-try:
-    counter.add(0.5)
-except TypeError as error:
-    print(error)  # amount must be an integer, not float
-print(counter.get())  # 1
-```
-
-## Compare-and-set and compare-and-exchange
-
-`compare_and_set(expect, new)` swaps only when the value equals `expect` and says whether
-it did. `compare_and_exchange(expect, new)` returns the value it saw instead, so a failed
-attempt already tells you what to retry with.
-
-```python
-from atomicint import AtomicInt
-
-flag = AtomicInt(0)
-print(flag.compare_and_set(0, 1))  # True
-print(flag.compare_and_set(0, 1))  # False
 
 version = AtomicInt(7)
+print(version.compare_and_set(6, 10))  # False
 print(version.compare_and_exchange(6, 10))  # 7
 print(version.compare_and_exchange(7, 10))  # 7
 print(version.get())  # 10
 ```
 
-## Atomic updates
-
-`update(fn)` replaces the value with `fn(value)` and returns the new value;
-`get_and_update(fn)` returns the old one. The function runs outside the lock, so it may
-read the counter, and it is called again with the fresh value if another thread changed
-it meanwhile. Keep it free of side effects.
+`update(fn)` applies a function atomically and returns the new value; `get_and_update(fn)`
+returns the old one. The function may run more than once under contention, so keep it
+free of side effects.
 
 ```python
 from atomicint import AtomicInt
@@ -73,27 +62,16 @@ peak = AtomicInt(3)
 for sample in (5, 2, 9, 4):
     peak.update(lambda current, s=sample: max(current, s))
 print(peak.get())  # 9
-print(peak.get_and_update(lambda v: v * 2))  # 9
-print(peak.get())  # 18
 ```
 
-## Bounded counters
-
-`BoundedAtomicInt` keeps the value inside `[minimum, maximum]`. Either bound may be left
-out. Every write, the initial value included, follows one overflow policy:
-
-| `overflow` | What an out-of-range write does |
-| --- | --- |
-| `"raise"` (default) | raises `OverflowError`, the value is left untouched |
-| `"saturate"` | stores the nearest bound |
-| `"wrap"` | wraps around like a fixed-width integer (needs both bounds) |
+`BoundedAtomicInt` keeps the value inside `[minimum, maximum]`. A write outside the range
+raises `OverflowError` and changes nothing, or saturates at the bound, or wraps around
+like a fixed-width integer:
 
 ```python
 from atomicint import BoundedAtomicInt
 
-slots = BoundedAtomicInt(0, minimum=0, maximum=2)
-slots.increment()
-slots.increment()
+slots = BoundedAtomicInt(2, minimum=0, maximum=2)
 try:
     slots.increment()
 except OverflowError as error:
@@ -107,52 +85,24 @@ sequence = BoundedAtomicInt(254, minimum=0, maximum=255, overflow="wrap")
 print([sequence.get_and_add(1) for _ in range(4)])  # [254, 255, 0, 1]
 ```
 
-## Threads
-
-Each operation holds one internal lock for its whole duration, so it takes effect at a
-single instant between call and return (it is linearizable). That holds with or without
-the GIL, and the test suite checks it on a free-threaded build too.
+Every value must be a real integer: floats, strings and `bool` raise `TypeError` instead
+of being truncated or parsed, and the counter keeps its value.
 
 ```python
-import threading
-
 from atomicint import AtomicInt
 
-tickets = AtomicInt(0)
-issued: list[int] = []
-
-
-def worker() -> None:
-    for _ in range(1000):
-        issued.append(tickets.increment())
-
-
-threads = [threading.Thread(target=worker) for _ in range(8)]
-for t in threads:
-    t.start()
-for t in threads:
-    t.join()
-print(tickets.get())  # 8000
-print(sorted(issued) == list(range(1, 8001)))  # True
+counter = AtomicInt(1)
+try:
+    counter.add(0.5)
+except TypeError as error:
+    print(error)  # amount must be an integer, not float
+print(counter.get())  # 1
 ```
 
-## Copies and pickling
-
-A counter can be copied, deep-copied and pickled (to send it to a process pool, for
-instance). The copy is a new, independent counter with the same value, bounds and
-subclass attributes; it does not share updates with the original. Counters compare by identity, never by value.
-
-```python
-import pickle
-
-from atomicint import BoundedAtomicInt
-
-original = BoundedAtomicInt(5, minimum=0, maximum=9, overflow="wrap")
-twin = pickle.loads(pickle.dumps(original))
-twin.add(7)
-print(original.get(), twin.get())  # 5 2
-print(twin)  # BoundedAtomicInt(2, minimum=0, maximum=9, overflow='wrap')
-```
+The [guide](https://github.com/JaviLianes8/atomicint/blob/main/GUIDE.md) covers every
+operation, the overflow policies, errors, threads and free threading, copies and pickling,
+and typing. The [changelog](https://github.com/JaviLianes8/atomicint/blob/main/CHANGELOG.md)
+lists what changed in each release.
 
 ## API
 
@@ -172,26 +122,36 @@ print(twin)  # BoundedAtomicInt(2, minimum=0, maximum=9, overflow='wrap')
 | `BoundedAtomicInt(value=0, *, minimum=None, maximum=None, overflow="raise")` | An `AtomicInt` kept inside a range; exposes `minimum`, `maximum` and `overflow`. |
 | `Overflow` | The type of the overflow policy: `Literal["raise", "saturate", "wrap"]`. |
 
-## Why
+## Why atomicint
 
-CPython makes a single `int` read or write atomic, but a read-modify-write such
-as `x += 1` is not: under threads it can lose updates. The usual answer is to
-wrap a counter in your own `threading.Lock`, which is boilerplate repeated in
-every project, and the retry loops around it are easy to get wrong.
+The other atomic integer packages on PyPI are compiled extensions built for lock-free
+speed, and they store a fixed-width machine integer. Checked on 2026-10-22 against their
+PyPI releases:
 
-The existing packages solve a different problem. `atomicx`, `atomics` and
-`pyzas` are compiled extensions (Rust or C) built for lock-free performance, and
-`cereggii` targets free-threaded (nogil) builds. They pull in a toolchain or a
-special interpreter for a job most code does not need that hard. `atomicity` is
-early-stage and has no compare-and-set.
+- `atomicx` 0.0.15 (Rust): its `AtomicInt` is 64 bits wide; adding 1 to `2**63 - 1`
+  silently gives `-2**63`.
+- `cereggii` 1.0.1 (C extension, a wider toolkit for free threading): `AtomicInt64`
+  raises `OverflowError` past `2**63 - 1`.
+- `atomics` 1.0.3: binds a C library through `cffi`, a runtime dependency; integers wrap
+  on overflow, and its wheels are tagged for Python 3.6 to 3.11.
+- `pyzas` 1.0.1: requires Python 3.13 or newer and ships wheels for free-threaded 3.13
+  only.
+- `atomicity` 0.0.3 (Rust): describes itself as at a very early stage.
 
-`atomicint` fills the plain gap: a small, fully typed, zero-dependency atomic
-integer that runs on any CPython from 3.10, free-threaded builds included, with the
-operations people expect.
+`atomicint` takes the other trade. It is plain Python with one lock per counter, so it
+installs anywhere CPython 3.10+ runs, with or without the GIL, and holds integers of any
+size. Overflow is a choice you make per counter (raise, saturate or wrap at any range,
+not only at 64 bits). It is fully typed, checks its inputs, and every operation is tested
+for linearizability under contention and against Java's `AtomicLong` and JavaScript's
+`Atomics`.
+
+The cost is speed: a lock per operation is slower than a hardware atomic instruction.
+If a counter sits on a hot path of a free-threaded program and 64-bit wraparound is what
+you want, one of the compiled packages is the better fit.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/JaviLianes8/atomicint/blob/main/LICENSE).
 
 ## Links
 
