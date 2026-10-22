@@ -114,10 +114,15 @@ def test_a_strict_type_checker_accepts_a_consumer_of_the_installed_wheel(
     api = pytest.importorskip("mypy.api")
     script = tmp_path / "consumer.py"
     script.write_text(CONSUMER, encoding="utf-8")
-    out, err, status = api.run(
-        ["--strict", "--python-executable", str(installed), "--no-incremental", str(script)]
-    )
+    # A consumer's own settings (an empty config, not this project's) and a cache kept in
+    # the test's folder: mypy runs in this process, from the project root.
+    config = tmp_path / "mypy.ini"
+    config.write_text("[mypy]\n", encoding="utf-8")
+    cache = tmp_path / "mypy-cache"
+    flags = ["--strict", "--config-file", str(config), "--cache-dir", str(cache)]
+    out, err, status = api.run([*flags, "--python-executable", str(installed), str(script)])
     assert status == 0, out + err
+    assert cache.is_dir()
     result = _run(installed, "-I", script, cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "4 0 True"
