@@ -169,15 +169,16 @@ an `n`-bit machine integer; the tests compare it with Java's narrowing conversio
 Saturating matches Java's `Math.clamp`.
 
 The bounds and the policy are fixed when the counter is made. `ValueError` is raised for
-`minimum` greater than `maximum`, for `"wrap"` without both bounds, and for a policy that
-is not exactly one of the three strings (a `str` subclass is refused too).
+`minimum` greater than `maximum`, for `"wrap"` without both bounds, and for a string that
+is not one of the three names. A policy that is not a plain `str` raises `TypeError`, a
+`str` subclass included, because its comparisons could be changed.
 
 ## Errors
 
 | Error | When |
 | --- | --- |
-| `TypeError` | an input or update result is not an integer (see above) |
-| `ValueError` | `BoundedAtomicInt` gets an impossible range or an unknown policy |
+| `TypeError` | an input or update result is not an integer (see above), or the overflow policy is not a plain `str` |
+| `ValueError` | `BoundedAtomicInt` gets an impossible range or an unknown policy name |
 | `OverflowError` | a write falls outside the range of a `"raise"` counter |
 
 All three are the built-in exceptions. No operation changes the value when it raises.
@@ -196,10 +197,10 @@ except OverflowError as error:
 
 ## Threads and free threading
 
-An operation holds only the counter's own lock, and runs no Python code while it does,
-so counters never deadlock with each other. That also makes a counter safe to use from a
-`__del__` method, a weakref callback or a signal handler: CPython may run such code in the
-middle of an operation, in the same thread, even one on the same counter, and the
+An operation holds only the counter's own lock, and runs no Python code of its own while
+it does, so counters never deadlock with each other. That also makes a counter safe to use
+from a `__del__` method, a weakref callback or a signal handler: CPython may run such code
+in the middle of an operation, in the same thread, even one on the same counter, and the
 operation still finishes without losing either update.
 
 ```python
@@ -225,6 +226,22 @@ gc.collect()
 print(open_sessions.get())  # 0
 ```
 
+That promise has two limits, which no pure Python code can close:
+
+- It holds while no trace, profile or monitoring hook is installed (`sys.settrace`,
+  `sys.setprofile`, `sys.monitoring`: debuggers, profilers, coverage tools and the
+  `trace` module install them). A hook runs Python code at every line, also between an
+  operation's read and its store; if a finalizer or a signal handler runs there and
+  updates the same counter, that update is lost. The operation itself is not lost, nothing
+  hangs, and threads never lose updates.
+- On CPython 3.14 and later, an exception raised by a signal handler, such as
+  `KeyboardInterrupt` on Ctrl-C, can arrive just after an operation took the lock and
+  before the block that releases it begins. This is the `with` statement's own behaviour:
+  a plain `with lock:` does the same. The operation is abandoned with the value unchanged,
+  but the lock stays held by that thread. The thread itself can still use the counter;
+  any other thread that touches it waits forever. A program that catches
+  `KeyboardInterrupt` and carries on should not share that counter with other threads.
+
 The test suite checks the promise under heavy contention: every increment returns a
 distinct value and none is lost, compare-and-set lets exactly one thread claim each value,
 bounded counters never leave their range, and recorded histories of all operations mixed
@@ -240,9 +257,11 @@ pickled or copied counter is a new, independent one.
 `copy.copy`, `copy.deepcopy` and `pickle` make an independent counter with the same
 value, bounds, policy and subclass attributes, and a fresh lock. A subclass keeps its type
 and its attributes, also when its own `__init__` takes different arguments, because a
-copy is rebuilt without calling `__init__`. A pickle refers only to `atomicint.AtomicInt`
-or `atomicint.BoundedAtomicInt` (and the standard `copyreg` module), and counters pickled
-by 0.2.0 still load.
+copy is rebuilt without calling `__init__`. A pickle refers only to the counter's class
+and the standard `copyreg` module. The classes keep the module that defines them, so a
+pickle names `atomicint._atomic.AtomicInt` or `atomicint._bounded.BoundedAtomicInt`: those
+paths stay importable for the whole 1.x series, and counters pickled by 0.2.0 still load.
+Import the classes from `atomicint` itself; the paths are only for pickles.
 
 ```python
 import pickle
