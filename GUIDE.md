@@ -258,10 +258,11 @@ pickled or copied counter is a new, independent one.
 value, bounds, policy and subclass attributes, and a fresh lock. A subclass keeps its type
 and its attributes, also when its own `__init__` takes different arguments, because a
 copy is rebuilt without calling `__init__`. Every slot Python created for the subclass is
-copied, however `__slots__` was written (one string, a sequence or an iterator) and under
+copied, however `__slots__` was written (one string, any iterable, an iterator) and under
 the name Python gave a private one (`__tag`), also when a decorator rebuilds the class
 (`dataclass(slots=True)`) or a base's `__init_subclass__` wraps the new slots before it
-calls `super()`. The names are read once, when the class is made, so a slot whose
+calls `super()` (that last case needs a `__slots__` that can be read again, so not an
+iterator). The names are read once, when the class is made, so a slot whose
 descriptor is later replaced on the class (by a property that calls it, say) is still
 copied, a copy never reads the class dictionary (another thread may change the class
 meanwhile), and its cost grows only in step with the number of slots. Nothing is added to

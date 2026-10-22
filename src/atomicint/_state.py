@@ -59,17 +59,21 @@ def _listed(klass: type) -> dict[str, None]:
     # say) before this one runs, so the names in __slots__ count too when it can be read
     # again. While the class hooks run, the class still has the name Python mangled with.
     listed = vars(klass).get("__slots__", ())
-    if isinstance(listed, str):
-        listed = (listed,)
-    if not isinstance(listed, (tuple, list, dict, set, frozenset)):
-        return {}  # an iterator, used up when the class was made
     stem = klass.__name__.lstrip("_")
     names: dict[str, None] = {}
-    for name in listed:
-        if stem and name.startswith("__") and not name.endswith("__"):
-            name = f"_{stem}{name}"
-        if name not in _NOT_COPIED:
-            names[name] = None
+    try:
+        items = iter((listed,) if isinstance(listed, str) else listed)
+        if items is listed:
+            return names  # an iterator, used up when the class was made
+        for item in items:
+            # A plain copy: a str subclass may refuse to be compared or formatted.
+            name = str.__str__(item)
+            if stem and name.startswith("__") and not name.endswith("__"):
+                name = f"_{stem}{name}"
+            if name not in _NOT_COPIED:
+                names[name] = None
+    except Exception:
+        pass  # what cannot be read again (or a base hook left there) adds nothing
     return names
 
 

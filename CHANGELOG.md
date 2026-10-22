@@ -44,8 +44,11 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   attrs, a hand-made `type(...)`) has its own, and a slot or class attribute may have any
   name. They are kept by the class's identity, so classes that a metaclass makes equal (by
   name, say) keep their own names, and a metaclass that makes classes unhashable is
-  accepted as in 0.2.0. The names listed in `__slots__` count too, so a slot a base's `__init_subclass__`
-  wrapped before calling `super()` is kept. Making a class costs time in step with the
+  accepted as in 0.2.0. The names listed in `__slots__` count too, in any form that can be
+  read again (a deque or a dict view as well as a tuple), so a slot a base's
+  `__init_subclass__` wrapped before calling `super()` is kept; names given as a `str`
+  subclass that refuses comparison are read as plain strings, and anything else a base's
+  hook leaves in `__slots__` is skipped. Making a class costs time in step with the
   depth of its hierarchy, as for any class. Under a base whose `__init_subclass__` skips
   `super()`, the names are read at the first copy and kept.
 
