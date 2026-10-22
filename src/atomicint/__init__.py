@@ -19,14 +19,7 @@ from ._bounded import BoundedAtomicInt, Overflow
 
 __version__ = "1.0.0"
 
-# The public classes show and pickle as atomicint.<Name>, so a pickle never depends on
-# the private module that defines them.
-for _cls in (AtomicInt, BoundedAtomicInt):
-    _cls.__module__ = __name__
-    # Methods follow, so doctest finds their examples here (it takes properties anyway).
-    for _member in vars(_cls).values():
-        if callable(_member) and str(getattr(_member, "__module__", "")).startswith("atomicint._"):
-            _member.__module__ = __name__
-del _cls, _member
-
+# The classes keep the module that defines them, so tools find their source. Pickles name
+# atomicint._atomic.AtomicInt and atomicint._bounded.BoundedAtomicInt (0.2.0 ones too):
+# those paths stay importable for the whole 1.x series.
 __all__ = ["AtomicInt", "BoundedAtomicInt", "Overflow"]

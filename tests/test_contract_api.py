@@ -7,12 +7,13 @@ import inspect
 import operator
 import pydoc
 import typing
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 import atomicint
-from atomicint import AtomicInt, BoundedAtomicInt, Overflow, _bounded
+from atomicint import AtomicInt, BoundedAtomicInt, Overflow, _atomic, _bounded
 
 SIGNATURES = {
     "__init__": "(self, value: 'SupportsIndex' = 0) -> 'None'",
@@ -36,6 +37,7 @@ PROPERTIES = {"minimum", "maximum", "overflow"}
 # Typed as Any: these are the wrong types the checks below are about.
 FLOAT: Any = 1.5
 TEXT: Any = "1"
+NOTHING: Any = None
 
 
 def _public(cls: type) -> set[str]:
@@ -68,13 +70,33 @@ def test_the_overflow_type_lists_the_three_policies() -> None:
     assert typing.get_args(Overflow) == ("raise", "saturate", "wrap")
 
 
-def test_the_classes_belong_to_the_package_and_use_slots() -> None:
-    for cls in (AtomicInt, BoundedAtomicInt):
-        assert cls.__module__ == "atomicint"
+def test_the_classes_use_slots_and_name_the_module_that_defines_them() -> None:
+    # Pickles name these paths, so they stay importable for the whole 1.x series.
+    for cls, module in ((AtomicInt, _atomic), (BoundedAtomicInt, _bounded)):
+        assert cls.__module__ == module.__name__
+        assert getattr(module, cls.__name__) is cls is getattr(atomicint, cls.__name__)
         assert "__slots__" in vars(cls)
         with pytest.raises(AttributeError):
             cls().anything = 1  # type: ignore[attr-defined]
     assert issubclass(BoundedAtomicInt, AtomicInt)
+
+
+def test_tools_find_the_source_of_every_class_method_and_example() -> None:
+    # What IPython's ??, debuggers, Sphinx viewcode and doctest failure reports rely on.
+    for cls, module in ((AtomicInt, _atomic), (BoundedAtomicInt, _bounded)):
+        assert Path(inspect.getsourcefile(cls) or "") == Path(module.__file__ or "")
+        assert inspect.getsource(cls).startswith(f"class {cls.__name__}(")
+        tests = {t.name: t for t in doctest.DocTestFinder().find(module)}
+        example = tests[f"{module.__name__}.{cls.__name__}"]
+        assert (Path(example.filename or ""), example.lineno) == (
+            Path(module.__file__ or ""),
+            inspect.getsourcelines(cls)[1],
+        )
+    examples = {t.name: t.lineno for t in doctest.DocTestFinder().find(_atomic)}
+    for name in SIGNATURES:
+        assert inspect.getsource(getattr(AtomicInt, name)).lstrip().startswith(f"def {name}(")
+        if name != "__init__":
+            assert examples[f"atomicint._atomic.AtomicInt.{name}"], name
 
 
 def test_every_public_name_and_member_has_a_runnable_example() -> None:
@@ -102,6 +124,8 @@ def test_counters_are_always_truthy_and_compare_by_identity() -> None:
         (lambda: AtomicInt().update(lambda v: FLOAT), TypeError),
         (lambda: BoundedAtomicInt(minimum=2, maximum=1), ValueError),
         (lambda: BoundedAtomicInt(overflow=TEXT), ValueError),
+        (lambda: BoundedAtomicInt(overflow=NOTHING), TypeError),
+        (lambda: BoundedAtomicInt(overflow=FLOAT), TypeError),
         (lambda: BoundedAtomicInt(overflow="wrap", minimum=0), ValueError),
         (lambda: BoundedAtomicInt(5, maximum=4), OverflowError),
         (lambda: BoundedAtomicInt(minimum=FLOAT), TypeError),

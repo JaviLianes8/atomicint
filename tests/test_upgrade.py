@@ -1,4 +1,4 @@
-"""Counters pickled by 0.2.0 load in this version, and new pickles name public paths only.
+"""Counters pickled by 0.2.0 load in this version, and new pickles name only the class.
 
 The byte strings below are real output of the 0.2.0 code (commit f173b53 on main),
 pickled by CPython 3.13.2 on 2026-10-22 with protocols 0, 2 and 5:
@@ -65,10 +65,16 @@ def _globals(data: bytes) -> set[str]:
 
 
 @pytest.mark.parametrize("protocol", range(pickle.HIGHEST_PROTOCOL + 1))
-def test_a_new_pickle_refers_only_to_public_names(protocol: int) -> None:
+def test_a_new_pickle_refers_only_to_the_class_and_copyreg(protocol: int) -> None:
+    # The class is named where it is defined: the same paths 0.2.0 pickles name, which
+    # therefore stay importable for the whole 1.x series. No helper function is named.
     for counter in (AtomicInt(3), BoundedAtomicInt(3, minimum=0, maximum=5, overflow="wrap")):
         names = _globals(pickle.dumps(counter, protocol=protocol))
+        cls = type(counter)
         # Protocols 0 and 1 spell the standard copyreg module by its old name.
-        public = {"atomicint.AtomicInt", "atomicint.BoundedAtomicInt"}
-        assert names <= public | {"copyreg.__newobj__", "copy_reg.__newobj__"}
-        assert f"atomicint.{type(counter).__name__}" in names
+        assert f"{cls.__module__}.{cls.__name__}" in names
+        assert names - {f"{cls.__module__}.{cls.__name__}"} <= {
+            "copyreg.__newobj__",
+            "copy_reg.__newobj__",
+        }
+        assert cls.__module__ in ("atomicint._atomic", "atomicint._bounded")
