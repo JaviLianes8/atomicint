@@ -17,8 +17,9 @@ class AtomicInt(Committing, Copyable):
     Compound actions such as increment or compare-and-set never interleave with
     another thread, with or without the GIL: every operation takes effect at a single
     instant between its call and its return (it is linearizable). The counter may be
-    used from finalizers and signal handlers too. Values are Python integers of any
-    size; anything else raises :class:`TypeError`.
+    used from finalizers and signal handlers too (the guide lists the limits, such as
+    an active trace hook). Values are Python integers of any size; anything else
+    raises :class:`TypeError`.
 
     >>> hits = AtomicInt()
     >>> hits.increment()

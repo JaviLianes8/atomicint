@@ -1,4 +1,4 @@
-"""The locking discipline: no Python code ever runs while a counter's lock is held."""
+"""The locking discipline: an operation runs no Python code of its own under the lock."""
 
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ class Committing:
     object the collector tracks: handler code that uses this counter can only run just
     after the lock is taken, before anything is read. The lock is reentrant, so that code
     finishes its own operation there; the interrupted one then reads the new value, or
-    finds it changed and computes again.
+    finds it changed and computes again. A trace or monitoring hook runs Python code at
+    every line, here too, so with one installed that guarantee is gone (see the guide).
     """
 
     __slots__ = ("_lock", "_value")
