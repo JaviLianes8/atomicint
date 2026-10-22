@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-21
+
+The first release on PyPI, and the API is now stable: `AtomicInt`, `BoundedAtomicInt`
+and `Overflow`, with the names, signatures, defaults and error types of 0.2.0, are kept
+for the whole 1.x series. Semantic Versioning applies from here on.
+
+### Changed
+
+- Error messages stay short whatever the input. An integer of more than 120 bits is
+  written by its size (`<16610-bit integer> is outside [0, 5]`), a class name is cut
+  after 60 characters, and an unknown overflow policy is shown by its first 40
+  characters or by its type. Before, a value past Python's 4300-digit limit for
+  `str(int)` turned the `OverflowError` of a bounded counter, and the `ValueError` for
+  `minimum` greater than `maximum`, into an unrelated `ValueError` about that limit, and
+  a long policy string or class name was copied into the message whole.
+- `repr()` never fails: values of up to 1800 bits (541 digits) are written in full, larger
+  ones by their size. Before, the repr of a value past the digit limit raised `ValueError`.
+- The message for an unknown overflow policy reads
+  `overflow must be 'raise', 'saturate' or 'wrap', not 'clamp'`.
+- `AtomicInt` and `BoundedAtomicInt` report `atomicint` as their module, and a pickle now
+  refers only to them and to the standard `copyreg` module, never to a private module.
+  Counters pickled by 0.2.0 still load.
+
+### Added
+
+- A runnable example in the docstring of every public name, method and property; the
+  examples run as doctests.
+- `GUIDE.md`: the full behaviour of every operation, the overflow policies, errors,
+  threads, copies and typing.
+- Tests against independent references: Java's `AtomicLong`, `Math.clamp` and narrowing
+  conversions, and JavaScript's `Atomics` on typed arrays, run live, plus the rules
+  quoted from their fetched documentation.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Literal, SupportsIndex
 
 from ._atomic import AtomicInt
-from ._coerce import as_int
+from ._coerce import REPR_BITS, as_int, kind, show_int
 
 Overflow = Literal["raise", "saturate", "wrap"]
 _POLICIES = ("raise", "saturate", "wrap")
+_POLICY_CHARS = 40
 
 
 class BoundedAtomicInt(AtomicInt):
@@ -18,7 +19,19 @@ class BoundedAtomicInt(AtomicInt):
     ``"raise"`` raises :class:`OverflowError` and leaves the value untouched,
     ``"saturate"`` clamps to the nearest bound, and ``"wrap"`` wraps around like
     a fixed-width integer (both bounds required). A missing bound means no limit
-    on that side.
+    on that side. Bounds and policy are fixed at construction; a bad combination
+    raises :class:`ValueError`.
+
+    >>> byte = BoundedAtomicInt(255, minimum=0, maximum=255, overflow="wrap")
+    >>> byte.increment()
+    0
+    >>> volume = BoundedAtomicInt(8, minimum=0, maximum=10, overflow="saturate")
+    >>> volume.add(5)
+    10
+    >>> BoundedAtomicInt(3, maximum=3).increment()
+    Traceback (most recent call last):
+    ...
+    OverflowError: 4 is outside [unbounded, 3]
     """
 
     __slots__ = ("_maximum", "_minimum", "_overflow")
@@ -34,10 +47,10 @@ class BoundedAtomicInt(AtomicInt):
         low = None if minimum is None else as_int(minimum, "minimum")
         high = None if maximum is None else as_int(maximum, "maximum")
         if low is not None and high is not None and low > high:
-            raise ValueError(f"minimum {low} is greater than maximum {high}")
+            raise ValueError(f"minimum {show_int(low)} is greater than maximum {show_int(high)}")
         policy: object = overflow  # compared exactly: a str subclass or odd __eq__ is refused
         if type(policy) is not str or policy not in _POLICIES:
-            raise ValueError(f"overflow must be one of {_POLICIES}, not {policy!r}")
+            raise ValueError(f"overflow must be 'raise', 'saturate' or 'wrap', not {_name(policy)}")
         if overflow == "wrap" and (low is None or high is None):
             raise ValueError("overflow='wrap' needs both minimum and maximum")
         self._minimum: int | None = low
@@ -47,17 +60,29 @@ class BoundedAtomicInt(AtomicInt):
 
     @property
     def minimum(self) -> int | None:
-        """The lowest allowed value, or ``None`` for no lower limit."""
+        """The lowest allowed value, or ``None`` for no lower limit.
+
+        >>> BoundedAtomicInt(minimum=-1).minimum
+        -1
+        """
         return self._minimum
 
     @property
     def maximum(self) -> int | None:
-        """The highest allowed value, or ``None`` for no upper limit."""
+        """The highest allowed value, or ``None`` for no upper limit.
+
+        >>> print(BoundedAtomicInt(minimum=-1).maximum)
+        None
+        """
         return self._maximum
 
     @property
     def overflow(self) -> Overflow:
-        """The policy applied to a write that falls outside the range."""
+        """The policy applied to a write that falls outside the range.
+
+        >>> BoundedAtomicInt().overflow
+        'raise'
+        """
         return self._overflow
 
     def _fit(self, value: int) -> int:
@@ -67,7 +92,7 @@ class BoundedAtomicInt(AtomicInt):
         if not (below or above):
             return value
         if self._overflow == "raise":
-            raise OverflowError(f"{value} is outside [{_show(low)}, {_show(high)}]")
+            raise OverflowError(f"{show_int(value)} is outside [{_show(low)}, {_show(high)}]")
         if self._overflow == "saturate":
             clamp = low if below else high
             assert clamp is not None
@@ -76,11 +101,19 @@ class BoundedAtomicInt(AtomicInt):
         return low + (value - low) % (high - low + 1)
 
     def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}({self.get()}, minimum={self._minimum}, "
-            f"maximum={self._maximum}, overflow={self._overflow!r})"
-        )
+        value = show_int(self.get(), REPR_BITS)
+        low = _show(self._minimum, "None", REPR_BITS)
+        high = _show(self._maximum, "None", REPR_BITS)
+        policy = self._overflow
+        return f"{type(self).__name__}({value}, minimum={low}, maximum={high}, overflow={policy!r})"
 
 
-def _show(bound: int | None) -> str:
-    return "unbounded" if bound is None else str(bound)
+def _show(bound: int | None, missing: str = "unbounded", bits: int = 120) -> str:
+    return missing if bound is None else show_int(bound, bits)
+
+
+def _name(policy: object) -> str:
+    if type(policy) is not str:
+        return kind(policy)
+    text = repr(policy[:_POLICY_CHARS])
+    return text if len(policy) <= _POLICY_CHARS else text + "..."

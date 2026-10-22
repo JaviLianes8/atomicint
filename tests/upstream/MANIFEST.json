@@ -1,0 +1,74 @@
+{
+  "AtomicLong.html": {
+    "url": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/AtomicLong.html",
+    "revision": "Java SE 21 API documentation",
+    "licence": "Oracle documentation, not redistributed",
+    "size": 72336,
+    "sha256": "27b4f6b35bf1d9f399e8138e65d98a41b74ec199f8a95e646236f953c7d0fc7a",
+    "fetched": "2026-10-22"
+  },
+  "Math.html": {
+    "url": "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Math.html",
+    "revision": "Java SE 21 API documentation",
+    "licence": "Oracle documentation, not redistributed",
+    "size": 214906,
+    "sha256": "2c7bb5da29dc87951c4b02bfa9d1cb0dda6b6f0bf424f0044fcc7e8d5aa9935c",
+    "fetched": "2026-10-22"
+  },
+  "jls-5.html": {
+    "url": "https://docs.oracle.com/javase/specs/jls/se21/html/jls-5.html",
+    "revision": "Java Language Specification, Java SE 21 Edition",
+    "licence": "Oracle specification, not redistributed",
+    "size": 246720,
+    "sha256": "a04756c50c03e52939388c42ba7518aeeb440fc8d0a72f85fd1acf1c4932a80f",
+    "fetched": "2026-10-22"
+  },
+  "faq-library.rst": {
+    "url": "https://raw.githubusercontent.com/python/cpython/v3.14.0/Doc/faq/library.rst",
+    "revision": "CPython v3.14.0",
+    "licence": "PSF-2.0",
+    "size": 27001,
+    "sha256": "0926d60af6400f0e8fedf2af0b02877589bd301d7f9d8745aeb4fe65b86171d1",
+    "fetched": "2026-10-22"
+  },
+  "free-threading-python.rst": {
+    "url": "https://raw.githubusercontent.com/python/cpython/v3.14.0/Doc/howto/free-threading-python.rst",
+    "revision": "CPython v3.14.0",
+    "licence": "PSF-2.0",
+    "size": 7623,
+    "sha256": "baea2cde15bb105ecc20cccd3c8ee2fd22f2956061bece3bdcb73082242f42b5",
+    "fetched": "2026-10-22"
+  },
+  "trove-classifiers.py.txt": {
+    "url": "https://raw.githubusercontent.com/pypa/trove-classifiers/2026.9.21.13/src/trove_classifiers/__init__.py",
+    "revision": "trove-classifiers 2026.9.21.13",
+    "licence": "Apache-2.0",
+    "size": 43610,
+    "sha256": "d305cc4cc3a6d96cb4b181fa6a6912e9d1d3c63d5c8d02d9db0a26a5c4716057",
+    "fetched": "2026-10-22"
+  },
+  "mdn-atomics-compareexchange.md": {
+    "url": "https://raw.githubusercontent.com/mdn/content/468fcd167cd6f5979b1f6c92583894a281ae886e/files/en-us/web/javascript/reference/global_objects/atomics/compareexchange/index.md",
+    "revision": "mdn/content 468fcd167cd6",
+    "licence": "CC-BY-SA-2.5",
+    "size": 3288,
+    "sha256": "602c701cc6d8734d65711b120202cedf8b6ce53d382974821dd25dd61d25549f",
+    "fetched": "2026-10-22"
+  },
+  "mdn-atomics-add.md": {
+    "url": "https://raw.githubusercontent.com/mdn/content/468fcd167cd6f5979b1f6c92583894a281ae886e/files/en-us/web/javascript/reference/global_objects/atomics/add/index.md",
+    "revision": "mdn/content 468fcd167cd6",
+    "licence": "CC-BY-SA-2.5",
+    "size": 1971,
+    "sha256": "849d7e515d64ef36e004a33e4c456dc860b67c8fd1ab12c0171430857d2db11b",
+    "fetched": "2026-10-22"
+  },
+  "mdn-uint8clampedarray.md": {
+    "url": "https://raw.githubusercontent.com/mdn/content/468fcd167cd6f5979b1f6c92583894a281ae886e/files/en-us/web/javascript/reference/global_objects/uint8clampedarray/index.md",
+    "revision": "mdn/content 468fcd167cd6",
+    "licence": "CC-BY-SA-2.5",
+    "size": 3104,
+    "sha256": "3f6e1c0fa299c47772a11e8cfff9b3f99a68e7244976f8fe88ca73eaa8b18bb1",
+    "fetched": "2026-10-22"
+  }
+}
