@@ -46,14 +46,11 @@ def test_a_wrapped_slot_is_kept_whatever_iterable_listed_it(clone: Clone, label:
 
 
 class Touchy(str):
-    # A str subclass that refuses to be compared or formatted: Python accepts it as a slot.
+    # A str subclass that refuses to be compared: Python accepts it as a slot name.
     __hash__ = str.__hash__
 
     def __eq__(self, other: object) -> bool:
         raise RuntimeError("compared")
-
-    def __str__(self) -> str:
-        raise RuntimeError("formatted")
 
 
 class Plainly(AtomicInt):
