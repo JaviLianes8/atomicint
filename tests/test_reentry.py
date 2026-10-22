@@ -94,11 +94,13 @@ def test_a_finalizer_may_use_the_counter_during_any_operation(op: str) -> None:
     assert _run(program) == "True"
 
 
-@pytest.mark.parametrize("policy", ["raise", "saturate", "wrap"])
-@pytest.mark.parametrize("op", [*OPERATIONS, "outside"])
+BOUNDED_CASES = [(op, p) for p in ("raise", "saturate", "wrap") for op in OPERATIONS]
+# "outside" is a write the range refuses, which only the raise policy does.
+BOUNDED_CASES.append(("outside", "raise"))
+
+
+@pytest.mark.parametrize(("op", "policy"), BOUNDED_CASES)
 def test_a_finalizer_may_use_a_bounded_counter_during_any_operation(op: str, policy: str) -> None:
-    if op == "outside" and policy != "raise":
-        pytest.skip("only the raise policy refuses a write")
     program = FINALIZER.format(watchdog=WATCHDOG, bounded=True, policy=policy, op=op)
     assert _run(program) == "True"
 
