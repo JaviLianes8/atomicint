@@ -20,17 +20,18 @@ _NAMES: dict[int, tuple[weakref.ref[type], tuple[str, ...]]] = {}
 
 def _known(cls: type) -> tuple[str, ...] | None:
     entry = _NAMES.get(id(cls))
+    # The entry of a dead class is gone before its id can be reused (see _keep); the
+    # reference is checked all the same, as wrong names would silently lose data.
     return entry[1] if entry is not None and entry[0]() is cls else None
 
 
 def _keep(cls: type, names: tuple[str, ...]) -> None:
     key, table = id(cls), _NAMES  # held here, so module teardown cannot take them away
 
-    def forget(ref: weakref.ref[type]) -> None:
-        # Runs when the class dies, before its id can be reused by another object.
-        entry = table.get(key)
-        if entry is not None and entry[0] is ref:
-            table.pop(key, None)
+    def forget(_: weakref.ref[type]) -> None:
+        # CPython calls this when the class dies, before its memory, and so its id, can be
+        # reused. A reference replaced by a later _keep of the same class dies unfired.
+        table.pop(key, None)
 
     table[key] = (weakref.ref(cls, forget), names)
 
