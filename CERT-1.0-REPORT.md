@@ -520,13 +520,16 @@ Verification:
   its contract passes on both trees and kills the mutant.
 - Mutants: 14 of the new code and the stronger tests, all killed
   ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
-- Gates on another machine from the committed tree, CPython 3.14.6, fetched reference
-  files present, `ATOMICINT_E2E=1`: `ruff format --check .`, `ruff check .`,
+- Gates at 7259f05 on another machine from the committed tree, CPython 3.14.2, fetched
+  reference files present, `ATOMICINT_E2E=1`: `ruff format --check .`, `ruff check .`,
   `mypy --strict src`, `mypy --strict src tests` and `pytest` (996 passed, 7 skipped: the
   two free-threading tests and the five Java oracle tests, no Java there) each exit 0.
+  The same five, run on a third machine (CPython 3.14.6) before the commits, also exit 0
+  with the same counts.
 - The suite on every interpreter of this PC (Java 21.0.8 and Node.js 24.18.0 present, e2e
-  off): 994 passed and 9 skipped on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2;
-  996 passed and 7 skipped on 3.14.2t with the GIL disabled.
+  off), on the fixed tree before one answer in `tests/test_metaclass.py` was reworded:
+  994 passed and 9 skipped on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2; 996
+  passed and 7 skipped on 3.14.2t with the GIL disabled.
 
 Commits of this round: ce86c58 (class data read as Python keeps it, contracts, CHANGELOG,
 GUIDE), a33dca1 (linearizability of every operation and policy, README), 026bd39 (e2e type
