@@ -14,7 +14,15 @@ from pathlib import Path
 
 import pytest
 
-PACKAGE = {"__init__.py", "_atomic.py", "_bounded.py", "_coerce.py", "_state.py", "py.typed"}
+PACKAGE = {
+    "__init__.py",
+    "_atomic.py",
+    "_bounded.py",
+    "_coerce.py",
+    "_commit.py",
+    "_state.py",
+    "py.typed",
+}
 FORBIDDEN = ("__pycache__", ".pyc", "IMPROVEMENTS", "CERT-1.0", ".github", "dist/", "venv")
 
 
