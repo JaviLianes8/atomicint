@@ -56,3 +56,52 @@ Ids: C `_coerce.py`, A `_atomic.py`, S `_state.py`, B `_bounded.py`, I `__init__
 | B13 | raise policy no longer raises | killed: `src/atomicint/__init__.py::atomicint.BoundedAtomicInt` |
 | I1 | classes report the private module | killed: `tests/test_contract_api.py::test_the_classes_belong_to_the_package_and_use_slots` |
 | I2 | Overflow left out of __all__ | killed: `tests/test_contract.py::test_all_lists_exactly_the_public_api` |
+
+
+## After QA round 1
+
+The five survivors of the independent mutation lens, re-applied to the fixed tree and run
+against the contract, copy and message files: all killed.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| M06 | type name cut at 60 characters instead of after | killed: `tests/test_messages.py::test_a_type_name_is_cut_only_past_60_characters[60-False]` |
+| M28 | `__index__` turns negative values into 0 | killed: `tests/test_contract_api.py::test_int_and_index_give_the_current_value` |
+| M44 | policy cut at 40 characters instead of after | killed: `tests/test_messages.py::test_a_policy_is_cut_only_past_40_characters[40-False]` |
+| M47 | slot mangling ignores a leading underscore in the class name | killed: `tests/test_copy.py::test_a_private_slot_of_an_underscored_subclass_is_copied[copy]` |
+| M48 | every copy shares one module-wide lock | killed: `tests/test_copy.py::test_a_copy_has_a_lock_of_its_own[copy]` |
+
+22 new mutants over the code written in this round (the lock discipline in `_commit.py`,
+the range check under the lock, `__index__` lookup and binding, the `Overflow` docstring),
+each alone on a copy of the branch at 4f02eac, full suite with `-x` and a 120 s per-test
+limit on another machine (CPython 3.14.2, Node.js present, `ATOMICINT_E2E` unset). All 22
+killed. One of them, R05, survived a first run at 69996f5: no test compared equal values
+held in different `int` objects, so `test_compare_and_set_compares_values_not_objects`
+was added (0641a20) and kills it.
+
+The R mutants change `_commit.py`, `_atomic.py`, `_state.py`, `_bounded.py` and `_coerce.py`.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| R01 | bounded counter takes the unchecked path | killed: `src/atomicint/__init__.py::atomicint` |
+| R02 | checked add stores without its check | killed: `tests/test_bounded_stress.py::test_wrap_mode_hands_out_each_sequence_number_equally_often` |
+| R03 | update stores without its check | killed: `tests/test_linearizability.py::test_every_recorded_history_is_linearizable[False]` |
+| R04 | bounded compare applies the policy before comparing | killed: `tests/test_bounded.py::test_a_failed_compare_and_set_never_checks_the_range` |
+| R05 | unbounded compare by identity instead of value | killed: `tests/test_atomic.py::test_compare_and_set_compares_values_not_objects[AtomicInt]` |
+| R06 | constructor lock not reentrant | killed: per-test time limit (the counter hangs from a finalizer) |
+| R07 | lock of a copy not reentrant | killed: per-test time limit (the copy hangs from a finalizer) |
+| R08 | store returns the new value | killed: `src/atomicint/__init__.py::atomicint.AtomicInt.get_and_set` |
+| R09 | add returns the new value as the previous one | killed: `src/atomicint/__init__.py::atomicint.AtomicInt.get_and_add` |
+| R10 | unbounded add reads and stores under two separate locks | killed: `tests/test_linearizability.py::test_every_recorded_history_is_linearizable[False]` |
+| R11 | integer check trusts `__class__` | killed: `tests/test_inputs.py::test_a_spoofed_class_does_not_get_past_the_checks` |
+| R12 | `__index__` called unbound | killed: `tests/test_inputs.py::test_an_index_hook_is_bound_the_way_python_binds_it[odd0-3]` |
+| R13 | `__index__` looked up from the base class first | killed: `tests/test_inputs.py::test_the_nearest_index_hook_in_the_class_hierarchy_wins` |
+| R14 | hook result checked with `isinstance` | killed: `tests/test_inputs.py::test_an_index_hook_returning_a_non_integer_is_refused[odd0]` |
+| R15 | bool input accepted | killed: `tests/test_docs.py::test_every_example_runs_and_prints_its_comments[GUIDE-8]` |
+| R16 | bounded compare by identity instead of value | killed: `tests/test_fuzz.py::test_random_programs_match_the_model[1]` |
+| R17 | `Overflow` docstring set on the alias typing shares | killed: `tests/test_contract_api.py::test_overflow_has_its_own_docstring_with_a_runnable_example` |
+| R18 | `Overflow` example left out of the doctests | killed: `tests/test_contract_api.py::test_overflow_has_its_own_docstring_with_a_runnable_example` |
+| R19 | bounded add checks only the lower bound under the lock | killed: `src/atomicint/__init__.py::atomicint` |
+| R20 | bounded add skips the range check under the lock | killed: `src/atomicint/__init__.py::atomicint` |
+| R21 | lower limit dropped from the range check | killed: `tests/test_bounded.py::test_raise_refuses_an_out_of_range_write_and_keeps_the_value[get_and_add-args2]` |
+| R22 | bounded compare never checks the new value | killed: `tests/test_bounded.py::test_raise_refuses_an_out_of_range_write_and_keeps_the_value[compare_and_set-args4]` |

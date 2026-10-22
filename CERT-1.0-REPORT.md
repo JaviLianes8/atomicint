@@ -25,7 +25,7 @@ Progress:
 | --- | --- | --- |
 | 1 | Public API reviewed for stability | PASS: the 3 names, 11 methods, 3 properties, parameter names and defaults of 0.2.0 kept and pinned (`tests/test_contract_api.py`); every change in CHANGELOG 1.0.0 |
 | 2 | `__all__` exact, no private imports in docs | PASS: `AtomicInt`, `BoundedAtomicInt`, `Overflow`; the classes report `atomicint` as their module |
-| 3 | Docstrings with runnable examples, doctests | PASS: 17 doctests (package, both classes, every method and property); README (5 blocks) and GUIDE (8 blocks) examples run with their printed output checked |
+| 3 | Docstrings with runnable examples, doctests | PASS: 18 doctests (package, `Overflow`, both classes, every method and property); README (5 blocks) and GUIDE (9 blocks) examples run with their printed output checked |
 | 4 | Typed end to end | PASS: `mypy --strict src tests`, `py.typed`, revealed types and rejected misuse (`tests/test_typing.py`), a strict consumer type-checked against the installed wheel |
 | 5 | Typed, documented, bounded errors | PASS: built-in `TypeError`, `ValueError`, `OverflowError`, GUIDE error table, messages at most 200 characters for any input |
 | 6 | Contract tests of every public name | PASS |
@@ -34,14 +34,14 @@ Progress:
 | 9 | Seeded fuzz, no crash, hang or blowup | PASS |
 | 10 | Supported Pythons | PASS: CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2, 3.14.2t; 3.8 and 3.9 are below `requires-python`; no 3.13t on this PC |
 | 11 | README and `twine check` | PASS: `twine check --strict` PASSED for both files |
-| 12 | Dated CHANGELOG section | PASS: `## [1.0.0] - 2026-10-21` |
+| 12 | Dated CHANGELOG section | PASS: `## [1.0.0] - 2026-10-22` (moved from 2026-10-21 in QA round 1; it must name the upload day if that is later) |
 | 13 | pyproject 1.0.0, Production/Stable | PASS |
 | 14 | sdist and wheel contents | PASS |
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract |
-| 19 | Five independent QA lenses | pending (orchestrator) |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract) |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed (see QA lenses); re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -137,7 +137,7 @@ the contract added in b9c1f15. Table: [CERT-1.0-MUTANTS.md](https://github.com/J
 ## Packaging, e2e and Pythons (items 8, 10, 13, 14)
 
 - `tests/test_e2e_dist.py` and `tests/test_e2e_wheel.py` (with `ATOMICINT_E2E=1`): the
-  sdist is built, the wheel built from it; wheel members are exactly the six package files
+  sdist is built, the wheel built from it; wheel members are exactly the package files
   and the metadata files with the licence; the sdist holds sources, tests, scripts, docs
   and only the manifest of the fetched folder; metadata 1.0.0, `Requires-Python >=3.10`,
   no runtime dependency, Production/Stable, 3.10 to 3.14, MIT, the four project URLs;
@@ -157,3 +157,72 @@ At b9c1f15 on another machine from a fresh clone, CPython 3.14.2, each command o
 own, with the fetched files, Java 21.0.12 and Node.js 25.5.0, `ATOMICINT_E2E=1`:
 `ruff format --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests`
 and `pytest` (291 passed, 2 skipped: the free-threading tests) all exit 0.
+
+## QA lenses (item 19)
+
+### Round 1 (lenses a to e at cd17c8b)
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| c | F1 | high | A counter used from a finalizer (`__del__`, weakref callback) or a signal handler that interrupts an operation on the same counter hangs the process: operations ran Python code (`_fit`, messages, `capture`) while holding a non-reentrant lock | No Python code runs under the lock any more (new `_commit.py`): inputs, overflow policies, messages, update functions and copy state are computed outside it; a value computed outside is stored only if the value it came from is still there; the in-range check of a bounded add is a comparison with infinities, which runs in C; the lock is a `threading.RLock`. CHANGELOG "Fixed", GUIDE model, threads (with a runnable `__del__` example) and cost sections |
+| c | F2 | low | `__index__` was fetched from the type and called unbound (a `classmethod` or `staticmethod` hook failed), and `isinstance` trusted a spoofed `__class__` (a hook answering `True` got past the `bool` check) | The real type is checked; the hook is found along the real MRO and bound through its descriptor as CPython does; the result's real type is checked. CHANGELOG "Fixed", GUIDE inputs |
+| a | A1 | low | README and GUIDE named the update parameter `fn`; the keyword is `function` | README, GUIDE and the CHANGELOG 0.2.0 entry say `function`; the signature is unchanged and stays pinned |
+| a, b | A2, F1 | low | "1800 bits (541 digits)": the maximum is 542 | CHANGELOG and the `_coerce.py` comment say 542 |
+| a | A3 | low | `Overflow` had no docstring of its own | `Overflow` has one with a runnable example, collected as a doctest. It is set on an alias object of its own (a nested `Literal`, the same type once flattened): typing caches `Literal[...]` by its arguments, and setting `__doc__` on the cached object changed `help()` for any identical alias elsewhere (checked on 3.10 to 3.14) |
+| a, b, d | A4, F2, D1 | low | CHANGELOG dated 1.0.0 2026-10-21, before its own commits; 0.1.0 had no date | 1.0.0 dated 2026-10-22, 0.1.0 dated 2026-10-11 (its git date) |
+| b | OBS1 | low | `expect` is compared exactly, not narrowed into the range as C and JavaScript do | Kept (deliberate); the GUIDE states it with the 8-bit example |
+| d | D2 | low | CONTRIBUTING said tests never touch the network, yet `ATOMICINT_E2E=1` fetches the build backend | CONTRIBUTING and the conftest docstring say the e2e mode needs the package index; a failed build names that cause first |
+| e | F1-M28 | medium | Nothing checked that `int()` and `operator.index()` return the value | `test_int_and_index_give_the_current_value` (negative, zero, positive, 200-bit, both classes) and negative indexing and slicing with counters |
+| e | F2-M47 | medium | Copies of an underscored subclass with a private slot were never tested | `test_a_private_slot_of_an_underscored_subclass_is_copied` under copy, deepcopy and every pickle protocol |
+| e | F3-M48 | low | Nothing checked that a copy gets a lock of its own | `test_a_copy_has_a_lock_of_its_own`: distinct locks, and a sibling copy stays usable from another thread while one copy's lock is held |
+| e | F4-M06 | low | The 60-character cut of type names was not tested at its boundary | `test_a_type_name_is_cut_only_past_60_characters` (59, 60, 61) |
+| e | F5-M44 | low | The 40-character cut of policy strings was not tested at its boundary | `test_a_policy_is_cut_only_past_40_characters` (39, 40, 41) |
+
+The lenses' run summaries and observations (the GUIDE link that answers 404 until the pull
+request is merged, CPython 3.10 missing on one lens's machine) need no change in the
+repository. No finding is disputed.
+
+How the behaviour bugs were fixed, test first:
+
+- c/F1: `tests/test_reentry.py` runs, in a fresh interpreter each, a cyclic object whose
+  `__del__` writes to the counter during every operation (13 on `AtomicInt`, 13 under each
+  bounded policy, plus a refused write), a finalizer balance count, and a signal handler
+  that adds to the counter its own thread is adding to, counting that nothing is lost.
+  On cd17c8b with CPython 3.13.2, 37 of 59 failed (hangs). `tests/test_reentry_lock.py`
+  runs an operation inside a locked step of the same thread, deterministically, also on
+  copies and unpickled counters. Why a reentrant lock: on CPython 3.14.2 a signal handler
+  runs right after `with lock:` acquires, even around a body with no calls (a plain `Lock`
+  hung in a probe, an `RLock` did not). Why no update is lost: in each locked block the
+  only conditional jump that can be taken before the store is the one that skips it;
+  CPython 3.11 and later check for pending calls only at calls and backward jumps, and
+  3.10 also at taken conditional jumps (read in `Python/ceval.c` of v3.10.19).
+- c/F2: `tests/test_inputs.py` gained the `classmethod`, `staticmethod`, spoofed
+  `__class__` (with and without a hook, and as a hook result) and hook-override cases;
+  red on cd17c8b, green after.
+- a/A3 got its contract first:
+  `test_overflow_has_its_own_docstring_with_a_runnable_example`.
+
+Verification after the fixes:
+
+- The reentry programs on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2t
+  (GIL disabled): 57 programs each, 0 failures. A mixed probe (four threads adding, the
+  main thread adding while a signal handler and finalizers add too) ends with the exact
+  total on 3.10, 3.11, 3.13, 3.14 and 3.14t.
+- The suite at 4f02eac on every interpreter of this PC (Java 21 and Node.js present,
+  e2e off): 387 passed and 9 skipped on 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2
+  (the seven e2e tests and the two free-threading tests); 389 passed and 7 skipped on
+  3.14.2t.
+- Gates at 4f02eac on another machine from a clone, CPython 3.14.2, `ATOMICINT_E2E=1`,
+  fetched reference files present (no Java there, so the five Java oracle tests skipped;
+  they pass in the run above): `ruff format --check .`, `ruff check .`,
+  `mypy --strict src`, `mypy --strict src tests` and `pytest` (389 passed, 7 skipped)
+  each exit 0.
+- Mutations: the lens's five survivors are killed, and 22 author mutants over the new
+  code are killed ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Cost on CPython 3.13.2, same machine and method as the GUIDE: `get` 157 ns, `increment`
+  351 ns, `compare_and_set` 508 ns, bounded `increment` 471 ns (cd17c8b in the same
+  session: about 152, 322, 520 and 461 ns).
+
+Commits of this round: 230f5d6 (lock discipline, index binding, docs, contracts), 7aaed46,
+69996f5, 0641a20, 98138e8 (range check under the lock), 0024069, 4f02eac, and the commit
+that records this section.
