@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Literal, SupportsIndex
 
 from ._atomic import AtomicInt
@@ -104,6 +105,10 @@ class BoundedAtomicInt(AtomicInt):
         'raise'
         """
         return self._overflow
+
+    def _limits(self) -> tuple[float, float]:
+        low, high = self._minimum, self._maximum
+        return (-math.inf if low is None else low, math.inf if high is None else high)
 
     def _fit(self, value: int) -> int:
         low, high = self._minimum, self._maximum

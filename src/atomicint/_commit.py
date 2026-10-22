@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import threading
 from collections.abc import Callable
 from typing import ClassVar, SupportsIndex
@@ -23,11 +24,20 @@ class Committing:
     __slots__ = ("_lock", "_value")
     _lock: threading.RLock
     _value: int
-    # True while _fit is the identity: a new value then needs no Python code to check.
+    # True when every int is in range: no check at all (BoundedAtomicInt sets False).
     _exact: ClassVar[bool] = True
 
+    def _limits(self) -> tuple[float, float]:
+        # The range a value may take as it is. Infinities compare with any int in C, so
+        # checking a value against these runs no Python code, even under the lock.
+        return (-math.inf, math.inf)
+
+    def _within(self, value: int) -> bool:
+        floor, ceiling = self._limits()
+        return floor <= value <= ceiling
+
     def _fit(self, value: int) -> int:
-        # Hook for subclasses that restrict the range (they set _exact to False); never
+        # The value the overflow policy stores for value (itself when in range); never
         # called with the lock held. Raising here must leave the value as it was.
         return value
 
@@ -45,8 +55,16 @@ class Committing:
                 new = current + delta
                 self._value = new
             return current, new
+        floor, ceiling = self._limits()
         with lock:
             current = self._value
+            new = current + delta
+            fits = floor <= new <= ceiling
+            if fits:
+                self._value = new
+        if fits:
+            return current, new
+        # Out of range: the policy decides, without the lock.
         while True:
             new = self._fit(current + delta)
             # Identity, not equality: current is the very object read, and `is` costs nothing.
@@ -60,13 +78,14 @@ class Committing:
 
     def _exchange(self, wanted: int, replacement: int) -> int:
         lock = self._lock
-        if self._exact:
+        if self._exact or self._within(replacement):
             with lock:
                 seen = self._value
                 if seen == wanted:
                     self._value = replacement
             return seen
-        # A failed compare stores nothing, so it never checks the range of replacement.
+        # replacement is out of range. A failed compare stores nothing, so it never
+        # applies the policy; a successful one stores what the policy makes of it.
         fitted: int | None = None
         with lock:
             seen = self._value
