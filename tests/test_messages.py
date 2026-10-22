@@ -99,6 +99,11 @@ def test_bounds_past_120_bits_are_described_by_their_size() -> None:
     assert _message(lambda: counter.set(-(2**122)), OverflowError) == (
         f"-<123-bit integer> is outside [-<122-bit integer>, {2**120 - 1}]"
     )
+    # The edge: a bound of exactly 121 bits is the first one described by its size.
+    counter = BoundedAtomicInt(0, minimum=-(2**120), maximum=2**120)
+    assert _message(lambda: counter.set(2**120 + 1), OverflowError) == (
+        "<121-bit integer> is outside [-<121-bit integer>, <121-bit integer>]"
+    )
 
 
 def test_a_very_long_type_name_is_cut_short() -> None:
