@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -359,3 +359,58 @@ Verification:
 
 Commits of this round: 04d028d (slot names stored per class, lock-call monitoring, new
 contracts, CHANGELOG, GUIDE) and the commit that records this section.
+
+### Round 4 (lenses c and e at b7e720a)
+
+Lens c confirmed F4 to F7 fixed on all six interpreters and found three new defects in the
+per-class slot names that 04d028d introduced. Lens e confirmed all five of its round 3
+findings fixed, proved three survivors equivalent (V17, V18, S08) and reported four gaps
+in the contracts.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| c | F4, F5, F6, F7 | low | Re-checks: iterator `__slots__`, the class change race, the wrapped slot and the copy cost all fixed | Nothing to change; still pinned by their round 3 contracts |
+| c | N1 | medium | The stored names were an attribute on the class, so a class rebuilt from a copy of another's namespace (`dataclass(slots=True)`, attrs, `type(name, bases, dict(cls.__dict__))`) took the stale tuple and copies silently dropped its new slots; a class attribute of that name lost the slots, and a slot of that name failed class creation | The names are kept in a `weakref.WeakKeyDictionary` keyed by the class itself, so nothing is added to a subclass's namespace and a rebuilt class is a new key. This goes one step past the suggested owner check: with the owner stored on the class, a slot of that name would still be replaced by the tuple. Contracts in `tests/test_class_hooks.py`: `Point` and `Reading` (`dataclass(slots=True)` over both classes), `Rebuilt` (a hand-made rebuild), `Clash` (a slot named `_atomicint_slot_names`), `Shadow` (a class attribute of that name), under copy, deepcopy and pickle protocols 0 to 5, and `test_a_subclass_namespace_gets_nothing_added` |
+| c | N2 | low | A slot was dropped when a base's `__init_subclass__` wrapped the subclass's slots before calling `super()` | The names listed in `__slots__` are added to the member scan when `__slots__` can be read again (a string, tuple, list, dict, set or frozenset), private ones mangled with the class name stripped of leading underscores, as Python does. Cases `Checked`, `Private` (list, private name), `Documented` (dict) and `_Hidden` (one string, a class name with a leading underscore) under a wrapping base |
+| c | N3 | low | Making a class cost the square of its hierarchy depth: every stored tuple in the MRO was merged although each already holds its bases' names | `_collect` skips the classes a used tuple already covers. `test_making_a_class_costs_about_what_python_takes_whatever_the_depth`: one more class on a chain of 600 must cost less than 5 times the same class on a plain chain (21.1 times at b7e720a, 1.2 now) |
+| e | SUMMARY | low | Run summary, not a defect | Nothing to change |
+| e | N1-V19-V20 | medium | Nothing pinned "creates no object the collector tracks": a set made under the lock loses finalizer updates on 3.10 and 3.11 and survived the suite | `tests/test_reentry_lost.py`: in a fresh interpreter, a cyclic object whose `__del__` adds to the counter is made before each of 10000 operations at each collector threshold 1, 2, 3, 4, 5, 7 and 10, for `get_and_set`, `compare_and_set`, `compare_and_exchange`, `update`, `get_and_update`, `add` and `get_and_add`, on a plain counter and a bounded one under each policy; finalizers must have run and the total must balance. `set` is left out on purpose: a store that wipes an add made just before it is the expected order of two writes, so no total can tell a lost update from it |
+| e | N2-S06-S12 | low | Nothing pinned a slot declared on a class made under a base that skips `super().__init_subclass__()` | Cases `QuietChild` (its own slot), `QuietGrand` (that slot one level up, both slots) and `QuietHeir` (a slot one level up on a base never copied itself, since a base copied first keeps its names and hides S12) |
+| e | N3-S09 | low | Nothing pinned that the class hook chains to `super().__init_subclass__(**kwargs)` | `test_a_mixin_class_hook_after_the_counter_still_runs` (a cooperative mixin after `AtomicInt` or `BoundedAtomicInt` still runs) and `test_an_unknown_class_keyword_still_raises` (`TypeError`) |
+| e | N4-S15 | low | The copy cost promise was pinned only for a class with stored names, and the GUIDE said the names are read when the class is made, which is not so under a hook-skipping base | Under such a base the names are now worked out at the first copy and kept, and the GUIDE says so. `test_the_first_copy_under_a_base_that_skipped_the_hook_costs_one_pass` (first copy of an 8000-slot class under `Quiet` against the standard copy, bound 10, 1.2 now) and `test_making_a_wide_class_costs_about_what_python_takes`; `test_under_a_base_that_skipped_the_hook_the_names_are_kept_from_the_first_copy` pins the kept names |
+
+CHANGELOG "Fixed" (slot entry) and the GUIDE copies section describe the rebuilt classes,
+the wrapping base, the untouched namespace, the class creation cost and the first-copy
+rule under a hook-skipping base. The GUIDE's operation cost figures were not re-measured:
+no operation path changed. No finding is disputed.
+
+Verification:
+
+- Red before the fix: the b7e720a `_state.py` with the new tests fails at collection
+  (`Clash`: `TypeError: 'member_descriptor' object is not iterable`); without `Clash` and
+  `Shadow`, 59 cases fail (`Point`, `Reading`, `Rebuilt`, `Checked`, `Private`,
+  `Documented` and `_Hidden` under all 8 clones, the namespace test, the depth cost test,
+  the first-copy names test), and `Shadow` loses its slot.
+  The finalizer program: V19 and V20 lose updates on CPython 3.10.19 and 3.11.5 for all
+  four counters; the fixed tree balances everywhere.
+- The lenses' probes on the fixed tree, CPython 3.13.2: `p23_rebuilt_class.py` keeps
+  every row; `sweep4.py` P01, P02, P04, P05, P08, P10 to P17 and P20 (47172 rounds, no
+  error, no loss) OK, P18 one more class at depth 800 0.86 ms against 0.82 ms plain,
+  P19 2.02 ms per copy at 8000 slots; P03 (wrap before the first copy under a
+  hook-skipping base) is the documented exception, as at b7e720a; P06 and P07 raise as
+  the standard library does (P21); P09 deletes the attribute that no longer exists.
+  `p_quiet.py`: `QuietChild` and `QuietGrand` keep both slots, the mixin hook runs, the
+  unknown keyword raises, the S15 cost ratio is 1.2.
+- Mutants: 18, all killed (see
+  [CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Gates at 28f1dd0 from a clone on this PC, CPython 3.14.2, fetched reference files
+  present, `ATOMICINT_E2E=1`: `ruff format --check .`, `ruff check .`,
+  `mypy --strict src`, `mypy --strict src tests` and `pytest` (770 passed, 2 skipped: the
+  two free-threading tests) each exit 0.
+- The suite at 28f1dd0 on every interpreter of this PC (e2e off): 763 passed and 9
+  skipped on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2; 765 passed and 7
+  skipped on 3.14.2t with the GIL disabled.
+
+Commits of this round: 28f1dd0 (slot names keyed by class, listed slots, covered bases,
+first-copy names, new contracts, CHANGELOG, GUIDE) and the commit that records this
+section.

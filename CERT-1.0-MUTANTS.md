@@ -168,3 +168,36 @@ e's survivors from round 3.
 | S3 | stored names ignored, worked out on every copy | equivalent: the walk starts at the class's own stored tuple, so the names are the same and only a constant cost is added |
 | S4 | the lock copied with the slots | killed: `tests/test_copy_slots.py::test_every_declared_slot_is_kept[deepcopy-Streamed]` |
 | S5 | the bases' stored names ignored when a class is made | killed: `tests/test_copy_slots.py::test_inherited_and_wrapped_slots_are_kept[copy-WrappedChild]` |
+
+## After QA round 4
+
+The fix of lens c's N1 to N3 keeps each class's slot names in a table keyed by the class
+(not on the class), adds the names listed in `__slots__`, and skips the bases a stored
+tuple already covers. Each `_state.py` mutant below was applied alone to a copy of the
+fixed tree and run with `-x` against the copy, class hook and API tests on this PC
+(CPython 3.13.2). S06, S09, S12 and S15 are lens e's survivors from round 4, written
+against the new code. The `_commit.py` mutants were run with the new finalizer program on
+CPython 3.10.19 and 3.11.5 (on 3.12 and later the collector does not start inside an
+allocation, so such a mutant cannot lose an update there); the fixed tree passes it on
+both.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| V19 | `_store` writes `self._value, = {new}` (a set made under the lock) | killed: `tests/test_reentry_lost.py::test_no_update_from_a_finalizer_is_lost_during_any_operation[get_and_set]` (all four counters lose updates on 3.10 and 3.11) |
+| V20 | the in-range compare-and-set stores `self._value, = {replacement}` | killed: `[compare_and_set]` and `[compare_and_exchange]` of the same test |
+| W1 | the unbounded add stores through a set | killed: `[add]` and `[get_and_add]` (plain counter) |
+| W2 | the bounded in-range add stores through a set | killed: `[add]` and `[get_and_add]` (the three bounded counters) |
+| W3 | the update store goes through a set | killed: `[update]` and `[get_and_update]` |
+| S06 | a class with no names of its own takes the first stored tuple up its hierarchy | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-QuietChild.extra]` |
+| S09 | `Copyable.__init_subclass__` does not chain to `super()` | killed: `tests/test_class_hooks.py::test_a_mixin_class_hook_after_the_counter_still_runs[AtomicInt]` |
+| S12 | `_collect` reads the slots of the copied class at every level | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-QuietHeir.own]` |
+| S15 | `_collect` de-duplicates through a list | killed: `tests/test_copy_cost.py::test_the_first_copy_under_a_base_that_skipped_the_hook_costs_one_pass` |
+| R1 | a stored tuple covers only its own class | killed: `tests/test_copy_cost.py::test_making_a_class_costs_about_what_python_takes_whatever_the_depth` |
+| R2 | the names listed in `__slots__` left out | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-Checked.tag]` |
+| R3 | listed private names not mangled | killed: `[copy-Private._Private__tag]` of the same test |
+| R4 | leading underscores of the class name kept when mangling | killed: `[copy-_Hidden._Hidden__tag]` |
+| R5 | names under a hook-skipping base not kept after the first copy | killed: `tests/test_class_hooks.py::test_under_a_base_that_skipped_the_hook_the_names_are_kept_from_the_first_copy` |
+| R6 | a one-string `__slots__` not read again | killed: `[copy-_Hidden._Hidden__tag]` |
+| R7 | covered bases not skipped | killed: `tests/test_copy_cost.py::test_making_a_class_costs_about_what_python_takes_whatever_the_depth` |
+| R8 | a listed `__dict__` taken for a slot | killed: `tests/test_copy_slots.py::test_a_declared_instance_dict_is_copied_not_shared[copy]` |
+| R9 | a dict `__slots__` not read again | killed: `[copy-Documented.tag]` |
