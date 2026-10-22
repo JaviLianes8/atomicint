@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
+
 import pytest
 
 from atomicint import AtomicInt
@@ -53,3 +56,29 @@ def test_an_update_that_keeps_the_value_still_succeeds() -> None:
     counter = AtomicInt(6)
     assert counter.get_and_update(lambda v: v) == 6
     assert counter.get() == 6
+
+
+def _in_another_thread(action: Callable[[], object]) -> bool:
+    # True when the action finished: a lock held by this thread would keep it waiting.
+    worker = threading.Thread(target=action, daemon=True)
+    worker.start()
+    worker.join(timeout=10)
+    return not worker.is_alive()
+
+
+@pytest.mark.parametrize("which", ["update", "get_and_update"])
+def test_the_function_runs_without_the_lock(which: str) -> None:
+    counter = AtomicInt(5)
+    seen: list[int] = []
+    reads: list[int] = []
+
+    def step(value: int) -> int:
+        seen.append(value)
+        if len(seen) == 1:
+            # Another thread can read the counter, and its write makes the update retry.
+            assert _in_another_thread(lambda: reads.append(counter.get()))
+            assert _in_another_thread(lambda: counter.set(50))
+        return value + 1
+
+    assert getattr(counter, which)(step) == (51 if which == "update" else 50)
+    assert (seen, reads, counter.get()) == ([5, 50], [5], 51)
