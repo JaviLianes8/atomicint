@@ -39,7 +39,13 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   underscores (such as `_`), where Python does not mangle `__tag` at all. Now the names
   are the slots Python created, read once when the class is made: a slot whose descriptor
   is later replaced by a wrapper is still copied, and a copy never reads the class
-  dictionary, so it is safe while another thread changes the class.
+  dictionary, so it is safe while another thread changes the class. The names are kept
+  outside the class, so a class rebuilt from another's namespace (`dataclass(slots=True)`,
+  attrs, a hand-made `type(...)`) has its own, and a slot or class attribute may have any
+  name. The names listed in `__slots__` count too, so a slot a base's `__init_subclass__`
+  wrapped before calling `super()` is kept. Making a class costs time in step with the
+  depth of its hierarchy, as for any class. Under a base whose `__init_subclass__` skips
+  `super()`, the names are read at the first copy and kept.
 
 ### Changed
 

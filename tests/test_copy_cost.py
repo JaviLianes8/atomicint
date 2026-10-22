@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import functools
 import itertools
 import pickle
 import sys
@@ -112,3 +113,42 @@ def test_a_copy_costs_about_what_the_standard_copy_of_a_plain_class_costs() -> N
     assert copy.copy(wide).s7999 == "s7999"
     ratio = _best(lambda: copy.copy(wide)) / _best(lambda: copy.copy(plain))
     assert ratio < 10, f"a copy took {ratio:.1f} times the standard copy"
+
+
+def test_the_first_copy_under_a_base_that_skipped_the_hook_costs_one_pass() -> None:
+    # No class hook ran for these, so their names are worked out at the first copy.
+    names = [f"s{i}" for i in range(8000)]
+    plain = _fill(type("Plain", (), {"__slots__": tuple(names)}), names)
+    firsts = []
+    for _ in range(3):
+        wide = _fill(type("WideQuiet", (Quiet,), {"__slots__": tuple(names)}), names)
+        firsts.append(_best(functools.partial(copy.copy, wide), rounds=1))
+    assert copy.copy(wide).s7999 == "s7999"
+    ratio = min(firsts) / _best(lambda: copy.copy(plain))
+    assert ratio < 10, f"a first copy took {ratio:.1f} times the standard copy"
+
+
+def _chain(base: type, depth: int) -> type:
+    for level in range(depth):
+        base = type(f"L{level}", (base,), {"__slots__": (f"s{level}",)})
+    return base
+
+
+def test_making_a_class_costs_about_what_python_takes_whatever_the_depth() -> None:
+    # Each class's stored names already hold those of its bases: merging them all again
+    # at every level made one class cost the square of the depth (20 times Python at 400).
+    deep, plain = _chain(AtomicInt, 600), _chain(object, 600)
+
+    def make(base: type) -> Callable[[], object]:
+        return lambda: type("Next", (base,), {"__slots__": ("x",)})
+
+    ratio = _best(make(deep), rounds=20) / _best(make(plain), rounds=20)
+    assert ratio < 5, f"making a class took {ratio:.1f} times what Python takes"
+
+
+def test_making_a_wide_class_costs_about_what_python_takes() -> None:
+    names = tuple(f"s{i}" for i in range(8000))
+    ratio = _best(lambda: type("Wide", (AtomicInt,), {"__slots__": names})) / _best(
+        lambda: type("Plain", (), {"__slots__": names})
+    )
+    assert ratio < 10, f"making a wide class took {ratio:.1f} times what Python takes"

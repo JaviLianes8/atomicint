@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import copyreg
 import threading
+import weakref
 from types import MemberDescriptorType
 from typing import Any
 
 State = tuple[dict[str, Any] | None, dict[str, Any]]
 
+# The slot names of each class, keyed by the class itself. An attribute on the class would
+# be copied into any class rebuilt from its namespace (dataclass(slots=True) does that),
+# and its name could clash with a slot or an attribute of a subclass.
+_NAMES: weakref.WeakKeyDictionary[type, tuple[str, ...]] = weakref.WeakKeyDictionary()
 
-# Where each class keeps its slot names, worked out once when the class is made.
-_CACHE = "_atomicint_slot_names"
+_NOT_COPIED = ("_lock", "__dict__", "__weakref__")
 
 
 def _declared(klass: type) -> dict[str, None]:
@@ -29,19 +33,50 @@ def _declared(klass: type) -> dict[str, None]:
     }
 
 
+def _listed(klass: type) -> dict[str, None]:
+    # A base's own class hook may replace a slot's descriptor (with a validating property,
+    # say) before this one runs, so the names in __slots__ count too when it can be read
+    # again. While the class hooks run, the class still has the name Python mangled with.
+    listed = vars(klass).get("__slots__", ())
+    if isinstance(listed, str):
+        listed = (listed,)
+    if not isinstance(listed, (tuple, list, dict, set, frozenset)):
+        return {}  # an iterator, used up when the class was made
+    stem = klass.__name__.lstrip("_")
+    names: dict[str, None] = {}
+    for name in listed:
+        if stem and name.startswith("__") and not name.endswith("__"):
+            name = f"_{stem}{name}"
+        if name not in _NOT_COPIED:
+            names[name] = None
+    return names
+
+
 def _collect(cls: type) -> tuple[str, ...]:
     names: dict[str, None] = {}
+    covered: set[type] = set()
     for klass in cls.__mro__:
-        known = vars(klass).get(_CACHE)
-        names.update(dict.fromkeys(known) if known is not None else _declared(klass))
+        if klass in covered:
+            continue
+        known = _NAMES.get(klass)
+        if known is None:
+            names.update(_declared(klass))
+        else:
+            # Stored names already hold those of every class above klass: skipping them
+            # keeps making a class linear in the depth of its hierarchy.
+            names.update(dict.fromkeys(known))
+            covered.update(klass.__mro__)
     return tuple(names)
 
 
 def slot_names(cls: type) -> tuple[str, ...]:
     """Every slot Python created along the class hierarchy, except the lock."""
-    known: tuple[str, ...] | None = vars(cls).get(_CACHE)
-    # Only a subclass whose base skipped super().__init_subclass__() has no names stored.
-    return known if known is not None else _collect(cls)
+    known = _NAMES.get(cls)
+    if known is None:
+        # Only a subclass whose base skipped super().__init_subclass__() gets here: its
+        # names are worked out at its first copy and kept from then on.
+        known = _NAMES[cls] = _collect(cls)
+    return known
 
 
 def capture(obj: object) -> State:
@@ -70,7 +105,7 @@ class Copyable:
         super().__init_subclass__(**kwargs)
         # Fixed now, while every slot still has the descriptor Python made: a wrapper may
         # replace one on the class later, and a copy then reads no class dictionary at all.
-        type.__setattr__(cls, _CACHE, _collect(cls))
+        _NAMES[cls] = tuple(dict.fromkeys(_collect(cls)) | _listed(cls))
 
     def __reduce__(self) -> tuple[Any, ...]:
         # The lock cannot be pickled. Rebuild without calling __init__, so subclasses

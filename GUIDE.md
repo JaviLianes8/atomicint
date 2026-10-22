@@ -259,11 +259,15 @@ value, bounds, policy and subclass attributes, and a fresh lock. A subclass keep
 and its attributes, also when its own `__init__` takes different arguments, because a
 copy is rebuilt without calling `__init__`. Every slot Python created for the subclass is
 copied, however `__slots__` was written (one string, a sequence or an iterator) and under
-the name Python gave a private one (`__tag`). The names are read once, when the class is
-made, so a slot whose descriptor is later replaced on the class (by a property that calls
-it, say) is still copied, a copy never reads the class dictionary (another thread may
-change the class meanwhile), and its cost grows only in step with the number of slots. A
-pickle refers only to the counter's class
+the name Python gave a private one (`__tag`), also when a decorator rebuilds the class
+(`dataclass(slots=True)`) or a base's `__init_subclass__` wraps the new slots before it
+calls `super()`. The names are read once, when the class is made, so a slot whose
+descriptor is later replaced on the class (by a property that calls it, say) is still
+copied, a copy never reads the class dictionary (another thread may change the class
+meanwhile), and its cost grows only in step with the number of slots. Nothing is added to
+the subclass's namespace. One exception: a class made under a base whose
+`__init_subclass__` does not call `super()` is not seen when it is made, so its names are
+read at its first copy and kept from then on. A pickle refers only to the counter's class
 and the standard `copyreg` module. The classes keep the module that defines them, so a
 pickle names `atomicint._atomic.AtomicInt` or `atomicint._bounded.BoundedAtomicInt`: those
 paths stay importable for the whole 1.x series, and counters pickled by 0.2.0 still load.
