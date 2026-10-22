@@ -249,3 +249,34 @@ are killed; L1 survives, as explained in its row.
 | L7 | a listed `__dict__` taken for a slot | killed: `tests/test_copy_slots.py::test_a_declared_instance_dict_is_copied_not_shared[copy]` |
 | L8 | private names mangled with the class name as is | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-_Hidden._Hidden__tag]` |
 | L9 | the loop reads `__slots__` itself, not the one-string tuple | killed: `tests/test_class_hooks.py::test_a_rebuilt_or_wrapped_slot_is_kept[copy-_Hidden._Hidden__tag]` |
+
+## After QA round 6
+
+The class's name, MRO and namespace are now read through `type`'s own descriptors, an
+`__index__` hook is bound through the `__get__` its class's MRO holds, `repr()` uses the
+name Python keeps, and the linearizability test draws all eleven operations under each
+policy. Each mutant below was applied alone to a copy of the fixed tree and run with `-x`
+on another machine (CPython 3.14.6): N1 to N12 against the metaclass, slot descriptor,
+slot form, identity, class hook, copy, copy cost, API, message and input tests; N13 and
+N14 against `tests/test_linearizability.py` alone. All 14 are killed. N5 survived the
+first run (every slot of that hierarchy was also listed in a `__slots__` that could be
+read again) and is killed since the base class lists its slot with an iterator; N14
+survived the first run (no written value left the range, so a swap never applied a
+policy) and is killed since set and swap values reach past the range.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| N1 | `kind()` reads `type(value).__name__` | killed: `tests/test_metaclass.py::test_a_metaclass_name_cannot_change_an_input_error[raising]` |
+| N2 | the hook's `__get__` found with `getattr` on its class | killed: `tests/test_metaclass.py::test_an_index_hook_is_bound_as_python_binds_it_whatever_its_metaclass_says` |
+| N3 | `class_name()` reads `cls.__name__` | killed: `tests/test_metaclass.py` fails at collection (`RuntimeError` from the metaclass) |
+| N4 | `class_name()` reads `__qualname__` | killed: `tests/test_metaclass.py::test_a_subclass_under_a_metaclass_name_is_made_shown_and_copied[copy-raising]` |
+| N5 | `_declared` reads `vars(klass)` | killed: `tests/test_metaclass.py::test_a_metaclass_name_mro_or_namespace_cannot_drop_a_slot[copy-__dict__ empty]` |
+| N6 | `_listed` reads `vars(klass)` | killed: `tests/test_metaclass.py::test_a_metaclass_name_mro_or_namespace_cannot_drop_a_slot[copy-__dict__ empty]` |
+| N7 | `_listed` mangles with `klass.__name__` | killed: `tests/test_metaclass.py` fails at collection (`RuntimeError` from the metaclass) |
+| N8 | `_collect` walks `cls.__mro__` | killed: `tests/test_metaclass.py` fails at collection (`TypeError`: the MRO is not iterable) |
+| N9 | covered bases taken from `klass.__mro__` | killed: `tests/test_metaclass.py` fails at collection (`TypeError`: the MRO is not iterable) |
+| N10 | `_declared` keeps another class's slot descriptor (lens e's S10) | killed: `tests/test_slot_descriptors.py::test_another_class_slot_descriptor_in_the_namespace_is_not_copied[copy]` |
+| N11 | `AtomicInt.__repr__` reads `type(self).__name__` | killed: `tests/test_metaclass.py::test_a_subclass_under_a_metaclass_name_is_made_shown_and_copied[copy-raising]` |
+| N12 | `BoundedAtomicInt.__repr__` reads `type(self).__name__` | killed: `tests/test_metaclass.py::test_a_subclass_under_a_metaclass_name_is_made_shown_and_copied[copy-raising]` |
+| N13 | an out-of-range add stores the policy's value without checking the value it read | killed: `tests/test_linearizability.py::test_every_recorded_history_is_linearizable[saturate]` |
+| N14 | an out-of-range swap stores the policy's value without checking the value it read | killed: `tests/test_linearizability.py::test_every_recorded_history_is_linearizable[saturate]` |

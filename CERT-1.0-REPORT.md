@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy) |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them) |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -476,3 +476,58 @@ Verification:
 Commits of this round: 861a812 (identity-keyed names, contracts, CHANGELOG, GUIDE), 692f501
 (callback simplified), fd5af23, 659f7ff, 3365d13 and 90f1001 (slot forms, contracts,
 CHANGELOG, GUIDE), and the commit that records this section.
+
+### Round 6 (lenses a, c, d and e at a270808)
+
+Lens a found every README and GUIDE example and all doctests right on six interpreters,
+the public API unchanged from 0.2.0, and two gaps in the docs. Lens c found no crash,
+hang, blowup or leak (37 hostile inputs on 15 input slots, sizes up to 32M bits, 6M fuzzed
+operations against its own model, thread, finalizer and collector stress, all on several
+interpreters) and three ways a metaclass or a later property could still change what the
+counter reads from a class. Lens d found the builds reproducible, the wheel and sdist
+clean and installable on six interpreters, the upgrade from 0.2.0 clean, and one test that
+was not hermetic. Lens e's mutation round left one survivor, S10, which a new contract
+now kills.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| a | F1 | medium | README "Why atomicint" said every other atomic integer package on PyPI is a compiled extension with a fixed-width integer; `atomos` 0.3.1 and `fastcounter` 1.1.0 are pure Python | README: "Most" of them are compiled, and a new list names the two pure Python ones with facts checked on 2026-10-23 from their PyPI metadata and released source (`atomos`: last upload 2015-07-05, classifiers up to Python 3.4, `AtomicInteger` with `get_and_add` and `compare_and_set` under a lock, integers of any size, no bounds, policy or type hints, `six` and `tox` required at run time; `fastcounter`: June 2021, counters with `increment` and a value, no compare-and-set) |
+| a | F2 | low | The docs claimed linearizability tests of every operation, but the histories left out `increment` and `decrement` and only built wrapping bounded counters; JavaScript cannot cover every operation | `tests/test_linearizability.py` draws all eleven operations, checked against `vars(AtomicInt)` by `test_the_histories_draw_every_public_operation`; the history test runs on a plain counter and under `raise`, `saturate` and `wrap`, the model knows each policy and records a refused write as such, and written values reach past the range so every policy is applied; `test_the_checker_knows_each_policy` tests the model. README and GUIDE now say exactly that, and that the wrap and saturate policies (not every operation) are compared with JavaScript |
+| c | C1 | low | `kind()` read `type(value).__name__`, which a metaclass property can answer: the documented `TypeError` became another exception, an unrelated message, or carried the metaclass's text | The name is read through `type`'s own `__name__` descriptor (`class_name()` in `_coerce.py`), for every message and for `repr()` as well. The `__get__` that binds an `__index__` hook is looked up along its class's MRO, as Python does, not through `getattr` (a metaclass could answer it too and the counter stored 99 where `operator.index` gives 7). `tests/test_metaclass.py`: four `__name__` answers (raising, a number, injected text, a huge list) for the input, policy, hook result and update result messages, `repr()` of both classes, and the hook binding |
+| c | C2 | low | `_state.py` read `klass.__name__` and `__mro__` through the metaclass: such a subclass could not be made, or its copies silently lost slots (the bounds of a `BoundedAtomicInt` among them) | `_state.py` reads the name, the MRO and the namespace through `type`'s descriptors (the namespace too: a metaclass `__dict__` property hid slots the same way). `tests/test_metaclass.py::test_a_metaclass_name_mro_or_namespace_cannot_drop_a_slot`: hierarchies under each hostile `__name__`, `__mro__` and `__dict__` answer, with a slot listed by an iterator, two slots a base hook wraps before `super()` (one private) and a plain one, under copy, deepcopy and every pickle protocol |
+| c | C3 | low | The GUIDE promised that a slot later hidden by a property "that calls it, say" is still copied; with a read-only property copies raise `AttributeError`, as for any slotted class | Fixed in the GUIDE: a slot replaced later by a property that reads and writes it is copied through that property, and a read-only one makes the copy raise `AttributeError`, as the standard library does. Reading and writing slots through the descriptors kept at class creation was tried and dropped: a member descriptor holds its class and cannot be weakly referenced, so keeping it outside the class kept every subclass alive (`test_a_class_is_freed_and_its_id_reused_safely` failed, 200 of 200 classes never freed). `tests/test_slot_descriptors.py` pins both cases, the read-only one against a plain slotted class |
+| c | INFO-evidence | low | Summary of what passed, not a defect | Nothing to change |
+| d | F1 | low | The e2e strict type check ran mypy in process with no cache folder and no config file: it wrote `.mypy_cache` into the project root and checked the consumer with this project's settings | The check passes an empty `mypy.ini` and a cache folder of its own, both in the test's temporary folder, and asserts the cache is there. Run from the tree after deleting `.mypy_cache`: no `.mypy_cache` in the root afterwards, and the cache folder is named after the running Python (3.14), not the project's 3.10 |
+| d | NOTE-report-file | low | Summary of what passed, not a defect | Nothing to change |
+| e | F1 | low | Mutant S10 (no `__objclass__ is klass` filter in `_declared`) survived: nothing pinned that another class's slot descriptor in a subclass's namespace is not copied | `tests/test_slot_descriptors.py::test_another_class_slot_descriptor_in_the_namespace_is_not_copied` (an `AtomicInt` and a `BoundedAtomicInt` subclass, copy, deepcopy and every pickle protocol); S10 is killed (N10 below) |
+
+CHANGELOG "Fixed": the `__index__` entry says the hook is bound exactly as Python binds
+it; a new entry says messages and `repr()` use the name Python keeps; the slot entry says
+the class's name, MRO and namespace are read as Python keeps them and that a later
+wrapper needs a getter and a setter. The GUIDE errors, threads and copies sections say
+the same. No finding is disputed.
+
+Verification:
+
+- Red before the fix: with the a270808 sources, `tests/test_metaclass.py` fails at
+  collection (`RuntimeError` from the raising `__name__` while a subclass is made). Each
+  scenario run on its own by a probe script against both trees (CPython 3.13.2): on
+  a270808 all four `__name__` answers break the input message (`RuntimeError`, a
+  `TypeError` about `len()`, a list concatenation error, the metaclass's text in the
+  message), three of them also break making a subclass, all three `__mro__` answers and
+  both `__dict__` answers lose a slot or raise, and the hook test stores 99 where
+  `operator.index` gives 7; on the fixed tree all 14 pass. Lens e's S10 is a mutant, so
+  its contract passes on both trees and kills the mutant.
+- Mutants: 14 of the new code and the stronger tests, all killed
+  ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Gates on another machine from the committed tree, CPython 3.14.6, fetched reference
+  files present, `ATOMICINT_E2E=1`: `ruff format --check .`, `ruff check .`,
+  `mypy --strict src`, `mypy --strict src tests` and `pytest` (996 passed, 7 skipped: the
+  two free-threading tests and the five Java oracle tests, no Java there) each exit 0.
+- The suite on every interpreter of this PC (Java 21.0.8 and Node.js 24.18.0 present, e2e
+  off): 994 passed and 9 skipped on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2;
+  996 passed and 7 skipped on 3.14.2t with the GIL disabled.
+
+Commits of this round: ce86c58 (class data read as Python keeps it, contracts, CHANGELOG,
+GUIDE), a33dca1 (linearizability of every operation and policy, README), 026bd39 (e2e type
+check), and the commit that records this section.
