@@ -67,17 +67,38 @@ def test_huge_bounds_are_described_by_their_size() -> None:
 
 @pytest.mark.parametrize(
     ("policy", "shown"),
-    [
-        ("clamp", "'clamp'"),
-        ("x" * 100_000, "'" + "x" * 40 + "'..."),
-        (None, "NoneType"),
-        (b"raise", "bytes"),
-    ],
-    ids=["clamp", "long", "none", "bytes"],
+    [("clamp", "'clamp'"), ("x" * 100_000, "'" + "x" * 40 + "'...")],
+    ids=["clamp", "long"],
 )
-def test_a_bad_policy_is_named_briefly(policy: Any, shown: str) -> None:
+def test_an_unknown_policy_is_named_briefly(policy: Any, shown: str) -> None:
     text = _message(lambda: BoundedAtomicInt(0, overflow=policy), ValueError)
     assert text == f"overflow must be 'raise', 'saturate' or 'wrap', not {shown}"
+
+
+@pytest.mark.parametrize(
+    ("policy", "shown"),
+    [
+        (None, "NoneType"),
+        (b"raise", "bytes"),
+        (type("P" * 5000, (str,), {})("wrap"), "P" * 60 + "..."),
+    ],
+    ids=["none", "bytes", "long-subclass-name"],
+)
+def test_a_policy_of_the_wrong_type_is_named_by_its_type(policy: Any, shown: str) -> None:
+    text = _message(lambda: BoundedAtomicInt(0, overflow=policy), TypeError)
+    assert text == f"overflow must be a plain str, not {shown}"
+
+
+def test_bounds_past_120_bits_are_described_by_their_size() -> None:
+    # Only the value was tested huge before: a bound must be cut at the same size.
+    counter = BoundedAtomicInt(0, maximum=2**1000)
+    assert _message(lambda: counter.set(2**1001), OverflowError) == (
+        "<1002-bit integer> is outside [unbounded, <1001-bit integer>]"
+    )
+    counter = BoundedAtomicInt(0, minimum=-(2**121), maximum=2**120 - 1)
+    assert _message(lambda: counter.set(-(2**122)), OverflowError) == (
+        f"-<123-bit integer> is outside [-<122-bit integer>, {2**120 - 1}]"
+    )
 
 
 def test_a_very_long_type_name_is_cut_short() -> None:

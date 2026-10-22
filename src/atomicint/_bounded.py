@@ -70,7 +70,9 @@ class BoundedAtomicInt(AtomicInt):
         if low is not None and high is not None and low > high:
             raise ValueError(f"minimum {show_int(low)} is greater than maximum {show_int(high)}")
         policy: object = overflow  # compared exactly: a str subclass or odd __eq__ is refused
-        if type(policy) is not str or policy not in _POLICIES:
+        if type(policy) is not str:
+            raise TypeError(f"overflow must be a plain str, not {kind(policy)}")
+        if policy not in _POLICIES:
             raise ValueError(f"overflow must be 'raise', 'saturate' or 'wrap', not {_name(policy)}")
         if overflow == "wrap" and (low is None or high is None):
             raise ValueError("overflow='wrap' needs both minimum and maximum")
@@ -137,8 +139,6 @@ def _show(bound: int | None, missing: str = "unbounded", bits: int = 120) -> str
     return missing if bound is None else show_int(bound, bits)
 
 
-def _name(policy: object) -> str:
-    if type(policy) is not str:
-        return kind(policy)
+def _name(policy: str) -> str:
     text = repr(policy[:_POLICY_CHARS])
     return text if len(policy) <= _POLICY_CHARS else text + "..."
