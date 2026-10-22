@@ -6,13 +6,14 @@ part of the test suite, and each `print` shows its output in the comment after i
 ## The model
 
 An `AtomicInt` is a Python integer guarded by one reentrant lock (`threading.RLock`)
-that belongs to the counter. The lock is held only to read the value and to store a new
-one: inputs are converted, ranges checked and update functions called outside it, and a
-new value is stored only if the value it was computed from is still there (otherwise the
-operation computes again). So each operation takes effect at a single instant between its
-call and its return (it is linearizable), and two operations on the same counter never
-interleave, with or without the GIL. Values are Python integers of any size; there is no
-overflow unless you ask for one with `BoundedAtomicInt`.
+that belongs to the counter. The lock is held only to read the value, compare it and store
+a new one: inputs are converted, overflow policies applied, error messages written and
+update functions called outside it, and a value computed outside it is stored only if the
+value it was computed from is still there (otherwise the operation computes again). So
+each operation takes effect at a single instant between its call and its return (it is
+linearizable), and two operations on the same counter never interleave, with or without
+the GIL. Values are Python integers of any size; there is no overflow unless you ask for
+one with `BoundedAtomicInt`.
 
 ## Operations
 
@@ -281,9 +282,13 @@ bounded constructor takes its range and policy by keyword only.
 
 ## Cost
 
-Each operation is a lock acquire and release around a few integer operations. Measured on
-CPython 3.13.2 on an AMD Zen 3 desktop (2026-10-22, best of five runs of 500,000 calls):
-`get` 140 ns, `increment` 300 ns, `compare_and_set` 490 ns. On the same machine
+An operation takes the counter's lock once, around a few integer operations and a range
+check. Three cases take it twice, reading first and storing after a computation done
+without the lock: `update` and `get_and_update`, a bounded addition whose result falls
+outside the range, and a successful compare-and-set whose `new` is outside it. Measured on CPython
+3.13.2 on an AMD Zen 3 desktop (2026-10-22, best of five runs of 500,000 calls): `get`
+160 ns, `increment` 350 ns, `compare_and_set` 510 ns, and `increment` on a
+`BoundedAtomicInt` 470 ns. On the same machine
 `atomicx` 0.0.15, a lock-free Rust extension, increments in 45 ns; see the README for
 when to pick a compiled package. Arithmetic on huge integers costs what Python's own
 does: `"wrap"` uses `%`, whose time grows with the size of the numbers.
