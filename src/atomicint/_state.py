@@ -8,6 +8,8 @@ import weakref
 from types import MemberDescriptorType
 from typing import Any
 
+from ._coerce import MRO, NAMESPACE, class_name
+
 State = tuple[dict[str, Any] | None, dict[str, Any]]
 
 # The slot names of each class, kept outside it: an attribute on the class would be copied
@@ -44,10 +46,11 @@ def _declared(klass: type) -> dict[str, None]:
     # used up, and the names come mangled exactly as Python mangled them, whatever the
     # class is called now. "__dict__" and "__weakref__" are not members, so they never
     # appear: capture() takes the instance dictionary on its own. The dictionary is copied
-    # first, as another thread may set or delete a class attribute meanwhile.
+    # first, as another thread may set or delete a class attribute meanwhile. Class data is
+    # read through type's own descriptors: a metaclass cannot answer for it.
     return {
         member.__name__: None
-        for member in vars(klass).copy().values()
+        for member in NAMESPACE.__get__(klass).copy().values()
         if isinstance(member, MemberDescriptorType)
         and member.__objclass__ is klass
         and member.__name__ != "_lock"
@@ -58,8 +61,8 @@ def _listed(klass: type) -> dict[str, None]:
     # A base's own class hook may replace a slot's descriptor (with a validating property,
     # say) before this one runs, so the names in __slots__ count too when it can be read
     # again. While the class hooks run, the class still has the name Python mangled with.
-    listed = vars(klass).get("__slots__", ())
-    stem = klass.__name__.lstrip("_")
+    listed = NAMESPACE.__get__(klass).get("__slots__", ())
+    stem = class_name(klass).lstrip("_")
     names: dict[str, None] = {}
     try:
         items = iter((listed,) if isinstance(listed, str) else listed)
@@ -80,7 +83,7 @@ def _listed(klass: type) -> dict[str, None]:
 def _collect(cls: type) -> tuple[str, ...]:
     names: dict[str, None] = {}
     covered: set[int] = set()  # ids, as a class may not be hashable
-    for klass in cls.__mro__:
+    for klass in MRO.__get__(cls):
         if id(klass) in covered:
             continue
         known = _known(klass)
@@ -90,7 +93,7 @@ def _collect(cls: type) -> tuple[str, ...]:
             # Stored names already hold those of every class above klass: skipping them
             # keeps making a class linear in the depth of its hierarchy.
             names.update(dict.fromkeys(known))
-            covered.update(map(id, klass.__mro__))
+            covered.update(map(id, MRO.__get__(klass)))
     return tuple(names)
 
 

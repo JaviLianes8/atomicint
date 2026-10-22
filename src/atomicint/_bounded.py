@@ -6,7 +6,7 @@ import math
 from typing import Literal, SupportsIndex
 
 from ._atomic import AtomicInt
-from ._coerce import REPR_BITS, as_int, kind, show_int
+from ._coerce import REPR_BITS, as_int, class_name, kind, show_int
 
 # A nested Literal is the same type once flattened. Spelled this way the alias is an
 # object of its own: typing caches Literal[...] by its arguments, and the docstring set
@@ -132,7 +132,9 @@ class BoundedAtomicInt(AtomicInt):
         low = _show(self._minimum, "None", REPR_BITS)
         high = _show(self._maximum, "None", REPR_BITS)
         policy = self._overflow
-        return f"{type(self).__name__}({value}, minimum={low}, maximum={high}, overflow={policy!r})"
+        return (
+            f"{class_name(type(self))}({value}, minimum={low}, maximum={high}, overflow={policy!r})"
+        )
 
 
 def _show(bound: int | None, missing: str = "unbounded", bits: int = 120) -> str:

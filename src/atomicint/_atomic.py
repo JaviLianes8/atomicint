@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import SupportsIndex
 
-from ._coerce import REPR_BITS, as_int, show_int
+from ._coerce import REPR_BITS, as_int, class_name, show_int
 from ._commit import Committing
 from ._state import Copyable
 
@@ -156,7 +156,7 @@ class AtomicInt(Committing, Copyable):
         return self.get()
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({show_int(self.get(), REPR_BITS)})"
+        return f"{class_name(type(self))}({show_int(self.get(), REPR_BITS)})"
 
 
 def _blank(cls: type[AtomicInt]) -> AtomicInt:

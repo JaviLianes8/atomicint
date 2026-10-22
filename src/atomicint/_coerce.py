@@ -13,8 +13,10 @@ _NAME_CHARS = 60
 # repr() writes every digit up to this size (542 digits, below the smallest digit limit
 # Python can be set to), so it never fails; a larger value is described by its size.
 REPR_BITS = 1800
-_MRO = vars(type)["__mro__"]
-_NAMESPACE = vars(type)["__dict__"]
+# type's own descriptors, so a metaclass cannot answer for what Python keeps on a class.
+MRO = vars(type)["__mro__"]
+NAMESPACE = vars(type)["__dict__"]
+_NAME = vars(type)["__name__"]
 
 
 def as_int(value: SupportsIndex, name: str) -> int:
@@ -30,7 +32,7 @@ def as_int(value: SupportsIndex, name: str) -> int:
         raise TypeError(f"{name} must be an integer, not {kind(value)}")
     # Called here, bound as Python binds it, so a hook that answers True is caught;
     # operator.index would turn it into 1 with only a deprecation warning.
-    bind = getattr(type(hook), "__get__", None)
+    bind = _lookup(type(hook), "__get__")
     result = (hook if bind is None else bind(hook, value, cls))()
     kind_of_result = type(result)
     if kind_of_result is bool or not issubclass(kind_of_result, int):
@@ -39,18 +41,24 @@ def as_int(value: SupportsIndex, name: str) -> int:
 
 
 def _lookup(cls: type, name: str) -> Any:
-    # The class attribute as the interpreter finds it: along the real MRO, read through
-    # type's own descriptors so a metaclass cannot answer for them.
-    for klass in _MRO.__get__(cls):
-        namespace = _NAMESPACE.__get__(klass)
+    # The class attribute as the interpreter finds it: along the real MRO, never through
+    # the metaclass.
+    for klass in MRO.__get__(cls):
+        namespace = NAMESPACE.__get__(klass)
         if name in namespace:
             return namespace[name]
     return None
 
 
+def class_name(cls: type) -> str:
+    """The name Python keeps for ``cls``, whatever its metaclass answers for ``__name__``."""
+    name: str = _NAME.__get__(cls)
+    return name
+
+
 def kind(value: object) -> str:
     """The type name of ``value``, cut short if a class has a very long name."""
-    name = type(value).__name__
+    name = class_name(type(value))
     return name if len(name) <= _NAME_CHARS else name[:_NAME_CHARS] + "..."
 
 

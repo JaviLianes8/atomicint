@@ -31,18 +31,23 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
 - An `__index__` defined as a `classmethod` or `staticmethod` is accepted, as Python
   itself accepts it; before, it raised a `TypeError` about its arguments. An object that
   claims to be an `int` through `__class__` is judged by its real type; before, its
-  `__index__` could answer `True` past the `bool` check and store 1.
+  `__index__` could answer `True` past the `bool` check and store 1. The hook is bound
+  exactly as Python binds it, whatever the metaclass of the hook's own class says.
+- Error messages and `repr()` use the name Python keeps for a class, as Python's own
+  messages do. Before, a metaclass that answers for `__name__` could turn the documented
+  `TypeError` into another exception or an unrelated message, or put its own text into
+  the message.
 - Copies and pickles of a subclass keep every slot Python created for it. Before, the
   copy read the names back from `__slots__` and mangled the private ones itself, so it
   silently left an attribute out when `__slots__` was an iterator (used up when the class
   was made), when the class was renamed after it was made, or when its name was only
   underscores (such as `_`), where Python does not mangle `__tag` at all. Now the names
   are the slots Python created, read once when the class is made: a slot whose descriptor
-  is later replaced by a wrapper is still copied, and a copy never reads the class
-  dictionary, so it is safe while another thread changes the class. The names are kept
-  outside the class, so a class rebuilt from another's namespace (`dataclass(slots=True)`,
-  attrs, a hand-made `type(...)`) has its own, and a slot or class attribute may have any
-  name. They are kept by the class's identity, so classes that a metaclass makes equal (by
+  is later replaced by a wrapper with a getter and a setter is still copied, and a copy
+  never reads the class dictionary, so it is safe while another thread changes the class.
+  The names are kept outside the class, so a class rebuilt from another's namespace
+  (`dataclass(slots=True)`, attrs, a hand-made `type(...)`) has its own, and a slot or
+  class attribute may have any name. They are kept by the class's identity, so classes that a metaclass makes equal (by
   name, say) keep their own names, and a metaclass that makes classes unhashable is
   accepted as in 0.2.0. The names listed in `__slots__` count too, in any form that can be
   read again (a deque or a dict view as well as a tuple), so a slot a base's
@@ -50,7 +55,10 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   subclass that refuses comparison are read as plain strings, and anything else a base's
   hook leaves in `__slots__` is skipped. Making a class costs time in step with the
   depth of its hierarchy, as for any class. Under a base whose `__init_subclass__` skips
-  `super()`, the names are read at the first copy and kept.
+  `super()`, the names are read at the first copy and kept. The class's name, MRO and
+  dictionary are read as Python keeps them, so a metaclass that answers for `__name__`,
+  `__mro__` or `__dict__` changes nothing either; before, copying such a class could
+  fail, or its copies silently lost slots, the bounds of a `BoundedAtomicInt` among them.
 
 ### Changed
 

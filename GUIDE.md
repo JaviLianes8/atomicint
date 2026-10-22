@@ -183,7 +183,9 @@ is not one of the three names. A policy that is not a plain `str` raises `TypeEr
 
 All three are the built-in exceptions. No operation changes the value when it raises.
 Messages stay short: an integer of more than 120 bits is written by its size, a class
-name is cut after 60 characters, and an unknown policy string after 40.
+name is cut after 60 characters, and an unknown policy string after 40. The class name is
+the one Python keeps for the class (as in its own messages), whatever a metaclass answers
+for `__name__`; `repr()` uses it too.
 
 ```python
 from atomicint import BoundedAtomicInt
@@ -244,9 +246,10 @@ That promise has two limits, which no pure Python code can close:
 
 The test suite checks the promise under heavy contention: every increment returns a
 distinct value and none is lost, compare-and-set lets exactly one thread claim each value,
-bounded counters never leave their range, and recorded histories of all operations mixed
-together are linearizable. It also runs every operation while finalizers and signal
-handlers use the same counter, and counts that no update is lost.
+bounded counters never leave their range, and recorded histories of all eleven operations
+mixed together are linearizable, on a plain counter and under each overflow policy. It
+also runs every operation while finalizers and signal handlers use the same counter, and
+counts that no update is lost.
 
 On free-threaded CPython the package keeps the GIL disabled; the suite runs on CPython
 3.14t with `sys._is_gil_enabled()` false. Counters are for threads in one process: a
@@ -262,14 +265,19 @@ copied, however `__slots__` was written (one string, any iterable, an iterator) 
 the name Python gave a private one (`__tag`), also when a decorator rebuilds the class
 (`dataclass(slots=True)`) or a base's `__init_subclass__` wraps the new slots before it
 calls `super()` (that last case needs a `__slots__` that can be read again, so not an
-iterator). The names are read once, when the class is made, so a slot whose
-descriptor is later replaced on the class (by a property that calls it, say) is still
-copied, a copy never reads the class dictionary (another thread may change the class
+iterator). The names are read once, when the class is made, so a slot whose descriptor
+is later replaced on the class by a property that reads and writes it (a getter and a
+setter that call the slot, say) is still copied, through that property. A copy reads and
+writes each slot by its name, as the standard library copies any slotted class, so a
+read-only property there makes the copy raise `AttributeError`, as it would without
+atomicint. A copy never reads the class dictionary (another thread may change the class
 meanwhile), and its cost grows only in step with the number of slots. Nothing is added to
-the subclass's namespace, and the names are kept by the class's identity, so a metaclass
-that makes classes equal by name, or unhashable, changes nothing. One exception: a class made under a base whose
-`__init_subclass__` does not call `super()` is not seen when it is made, so its names are
-read at its first copy and kept from then on. A pickle refers only to the counter's class
+the subclass's namespace, and the names are kept by the class's identity. The class's
+name, MRO and dictionary are read as Python keeps them, so a metaclass that makes classes
+equal by name or unhashable, or that answers for `__name__`, `__mro__` or `__dict__`,
+changes nothing. One exception: a class made under a base whose `__init_subclass__` does
+not call `super()` is not seen when it is made, so its names are read at its first copy
+and kept from then on. A pickle refers only to the counter's class
 and the standard `copyreg` module. The classes keep the module that defines them, so a
 pickle names `atomicint._atomic.AtomicInt` or `atomicint._bounded.BoundedAtomicInt`: those
 paths stay importable for the whole 1.x series, and counters pickled by 0.2.0 still load.
