@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import doctest
 import inspect
+import operator
+import pydoc
 import typing
 from typing import Any
 
 import pytest
 
 import atomicint
-from atomicint import AtomicInt, BoundedAtomicInt, Overflow
+from atomicint import AtomicInt, BoundedAtomicInt, Overflow, _bounded
 
 SIGNATURES = {
     "__init__": "(self, value: 'SupportsIndex' = 0) -> 'None'",
@@ -108,3 +111,27 @@ def test_each_failure_raises_its_documented_builtin_error(call: Any, error: type
     with pytest.raises(error) as caught:
         call()
     assert type(caught.value) is error
+
+
+@pytest.mark.parametrize("value", [-(2**200), -5, -1, 0, 1, 7, 2**200])
+@pytest.mark.parametrize("cls", [AtomicInt, BoundedAtomicInt])
+def test_int_and_index_give_the_current_value(cls: type[AtomicInt], value: int) -> None:
+    counter = cls(value)
+    for snapshot in (int(counter), operator.index(counter)):
+        assert (snapshot, type(snapshot)) == (value, int)
+
+
+def test_a_counter_indexes_a_sequence_from_either_end() -> None:
+    items = [10, 20, 30]
+    assert [items[AtomicInt(i)] for i in (-3, -1, 0, 2)] == [10, 30, 10, 30]
+    assert items[AtomicInt(-2) : AtomicInt(3)] == [20, 30]
+
+
+def test_overflow_has_its_own_docstring_with_a_runnable_example() -> None:
+    doc = Overflow.__doc__ or ""
+    assert ">>> " in doc
+    assert all(policy in doc for policy in typing.get_args(Overflow))
+    assert "saturate" in pydoc.render_doc(Overflow, renderer=pydoc.TextDoc())
+    # Set on an alias of its own, never on the one typing shares with other code.
+    assert typing.Literal["raise", "saturate", "wrap"].__doc__ != doc
+    assert any(t.name.endswith("Overflow") for t in doctest.DocTestFinder().find(_bounded))

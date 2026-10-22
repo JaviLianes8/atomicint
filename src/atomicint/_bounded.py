@@ -7,7 +7,26 @@ from typing import Literal, SupportsIndex
 from ._atomic import AtomicInt
 from ._coerce import REPR_BITS, as_int, kind, show_int
 
-Overflow = Literal["raise", "saturate", "wrap"]
+# A nested Literal is the same type once flattened. Spelled this way the alias is an
+# object of its own: typing caches Literal[...] by its arguments, and the docstring set
+# here must not land on an identical alias in someone else's code.
+Overflow = Literal["raise", Literal["saturate", "wrap"]]  # noqa: RUF041
+Overflow.__doc__ = """The overflow policy of a :class:`BoundedAtomicInt`, one of three names.
+
+``"raise"`` refuses an out-of-range write with :class:`OverflowError`, ``"saturate"``
+stores the nearest bound, and ``"wrap"`` wraps around the range like a fixed-width
+integer.
+
+>>> import typing
+>>> from atomicint import BoundedAtomicInt, Overflow
+>>> typing.get_args(Overflow)
+('raise', 'saturate', 'wrap')
+>>> policy: Overflow = "wrap"
+>>> BoundedAtomicInt(255, minimum=0, maximum=255, overflow=policy).increment()
+0
+"""
+# The alias is not a class or a function, so doctest finds its example only here.
+__test__ = {"Overflow": Overflow.__doc__}
 _POLICIES = ("raise", "saturate", "wrap")
 _POLICY_CHARS = 40
 
@@ -35,6 +54,7 @@ class BoundedAtomicInt(AtomicInt):
     """
 
     __slots__ = ("_maximum", "_minimum", "_overflow")
+    _exact = False
 
     def __init__(
         self,

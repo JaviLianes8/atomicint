@@ -7,17 +7,18 @@ from collections.abc import Callable
 from typing import SupportsIndex
 
 from ._coerce import REPR_BITS, as_int, show_int
+from ._commit import Committing
 from ._state import Copyable
 
 
-class AtomicInt(Copyable):
+class AtomicInt(Committing, Copyable):
     """An integer whose read-modify-write operations are safe across threads.
 
-    Each method holds one internal lock for the whole operation, so compound
-    actions such as increment or compare-and-set never interleave with another
-    thread, with or without the GIL. Every operation takes effect at a single
-    instant between its call and its return (it is linearizable). Values are
-    Python integers of any size; anything else raises :class:`TypeError`.
+    Compound actions such as increment or compare-and-set never interleave with
+    another thread, with or without the GIL: every operation takes effect at a single
+    instant between its call and its return (it is linearizable). The counter may be
+    used from finalizers and signal handlers too. Values are Python integers of any
+    size; anything else raises :class:`TypeError`.
 
     >>> hits = AtomicInt()
     >>> hits.increment()
@@ -26,16 +27,11 @@ class AtomicInt(Copyable):
     11
     """
 
-    __slots__ = ("_lock", "_value")
+    __slots__ = ()
 
     def __init__(self, value: SupportsIndex = 0) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._value = self._fit(as_int(value, "value"))
-
-    def _fit(self, value: int) -> int:
-        # Hook for subclasses that restrict the range; called with the lock held,
-        # or before the object is shared. Raising here must leave the value as it was.
-        return value
 
     def get(self) -> int:
         """Return the current value.
@@ -54,9 +50,7 @@ class AtomicInt(Copyable):
         >>> counter.get()
         42
         """
-        new = as_int(value, "value")
-        with self._lock:
-            self._value = self._fit(new)
+        self._store(self._fit(as_int(value, "value")))
 
     def add(self, amount: SupportsIndex) -> int:
         """Add ``amount`` (which may be negative) and return the new value.
@@ -64,10 +58,7 @@ class AtomicInt(Copyable):
         >>> AtomicInt(10).add(-4)
         6
         """
-        delta = as_int(amount, "amount")
-        with self._lock:
-            self._value = self._fit(self._value + delta)
-            return self._value
+        return self._add(as_int(amount, "amount"))[1]
 
     def get_and_add(self, amount: SupportsIndex) -> int:
         """Add ``amount`` and return the value from before the addition.
@@ -75,11 +66,7 @@ class AtomicInt(Copyable):
         >>> AtomicInt(100).get_and_add(5)
         100
         """
-        delta = as_int(amount, "amount")
-        with self._lock:
-            previous = self._value
-            self._value = self._fit(previous + delta)
-            return previous
+        return self._add(as_int(amount, "amount"))[0]
 
     def increment(self) -> int:
         """Add one and return the new value.
@@ -106,11 +93,7 @@ class AtomicInt(Copyable):
         >>> slot.get()
         8
         """
-        new = as_int(value, "value")
-        with self._lock:
-            previous = self._value
-            self._value = self._fit(new)
-            return previous
+        return self._store(self._fit(as_int(value, "value")))
 
     def compare_and_set(self, expect: SupportsIndex, new: SupportsIndex) -> bool:
         """Set the value to ``new`` only if it currently equals ``expect``.
@@ -142,13 +125,7 @@ class AtomicInt(Copyable):
         >>> version.get()
         10
         """
-        wanted = as_int(expect, "expect")
-        replacement = as_int(new, "new")
-        with self._lock:
-            seen = self._value
-            if seen == wanted:
-                self._value = self._fit(replacement)
-            return seen
+        return self._exchange(as_int(expect, "expect"), as_int(new, "new"))
 
     def update(self, function: Callable[[int], SupportsIndex]) -> int:
         """Replace the value with ``function(value)`` atomically; return the new value.
@@ -172,18 +149,6 @@ class AtomicInt(Copyable):
         8
         """
         return self._apply(function)[0]
-
-    def _apply(self, function: Callable[[int], SupportsIndex]) -> tuple[int, int]:
-        # Optimistic loop: compute without the lock so the function may read this
-        # counter (the lock is not reentrant), then commit only if nothing changed.
-        current = self.get()
-        while True:
-            candidate = as_int(function(current), "update result")
-            with self._lock:
-                if self._value == current:
-                    self._value = self._fit(candidate)
-                    return current, self._value
-                current = self._value
 
     def __index__(self) -> int:
         # Also serves int(), which falls back to __index__.

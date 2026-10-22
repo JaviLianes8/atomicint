@@ -5,12 +5,14 @@ part of the test suite, and each `print` shows its output in the comment after i
 
 ## The model
 
-An `AtomicInt` is a Python integer guarded by one `threading.Lock` that belongs to the
-counter. Each operation takes the lock once, does all of its work, and releases it, so it
-takes effect at a single instant between its call and its return (it is linearizable).
-Two operations on the same counter never interleave, with or without the GIL. Values are
-Python integers of any size; there is no overflow unless you ask for one with
-`BoundedAtomicInt`.
+An `AtomicInt` is a Python integer guarded by one reentrant lock (`threading.RLock`)
+that belongs to the counter. The lock is held only to read the value and to store a new
+one: inputs are converted, ranges checked and update functions called outside it, and a
+new value is stored only if the value it was computed from is still there (otherwise the
+operation computes again). So each operation takes effect at a single instant between its
+call and its return (it is linearizable), and two operations on the same counter never
+interleave, with or without the GIL. Values are Python integers of any size; there is no
+overflow unless you ask for one with `BoundedAtomicInt`.
 
 ## Operations
 
@@ -24,8 +26,8 @@ Python integers of any size; there is no overflow unless you ask for one with
 | `get_and_set(value)` | stores `value` | the value before |
 | `compare_and_set(expect, new)` | stores `new` if the value equals `expect` | `True` if it stored |
 | `compare_and_exchange(expect, new)` | stores `new` if the value equals `expect` | the value seen |
-| `update(fn)` | stores `fn(value)` | the new value |
-| `get_and_update(fn)` | stores `fn(value)` | the value before |
+| `update(function)` | stores `function(value)` | the new value |
+| `get_and_update(function)` | stores `function(value)` | the value before |
 
 `int(counter)` and `operator.index(counter)` return a snapshot, so a counter can be used
 wherever Python expects an integer index. The names follow Java's `AtomicLong`:
@@ -45,8 +47,11 @@ print(["a", "b", "c"][AtomicInt(2)])  # c
 ## Integer inputs
 
 Every value, amount, expected value, bound and update result must be an integer: an
-`int`, or an object with `__index__` (NumPy integers, another `AtomicInt`). Anything else
-raises `TypeError` before the counter is touched. In particular a float is never
+`int`, or an object with `__index__` (NumPy integers, another `AtomicInt`), found and
+called the way Python itself does it, so a `classmethod` or `staticmethod` `__index__`
+works too. The check uses an object's real type: one that claims to be an `int` through
+`__class__` is not taken for one. Anything else raises `TypeError` before the counter is
+touched. In particular a float is never
 truncated, a string is never parsed, and `bool` is refused even though it is an `int`
 subclass, because a counter set to `True` is almost always a bug. Type checkers accept
 `bool` where an `int` is expected, so that case is caught at run time only. An `int`
@@ -92,15 +97,16 @@ print(value.get())  # 42
 
 ## Update functions
 
-`update(fn)` and `get_and_update(fn)` read the value, call `fn` on it without holding the
-lock, and store the result only if the value has not changed in the meantime; otherwise
-they call `fn` again with the fresh value. So:
+`update(function)` and `get_and_update(function)` read the value, call `function` on it
+without holding the lock, and store the result only if the value has not changed in the
+meantime; otherwise they call `function` again with the fresh value. So:
 
-- `fn` may read the counter (the lock is not reentrant, so this would deadlock if `fn`
-  ran under it),
-- `fn` may be called more than once under contention, so it should have no side effects,
-- an exception from `fn` propagates and leaves the value untouched,
-- the result of `fn` must be an integer, or `TypeError` is raised and nothing is stored.
+- `function` may read the counter,
+- `function` may be called more than once under contention, so it should have no side
+  effects,
+- an exception from `function` propagates and leaves the value untouched,
+- the result of `function` must be an integer, or `TypeError` is raised and nothing is
+  stored.
 
 ```python
 from atomicint import AtomicInt
@@ -114,8 +120,8 @@ except TypeError as error:
 print(hits.get())  # 8
 ```
 
-`fn` must not change the counter it updates: each attempt would then see a changed value
-and try again, forever.
+`function` must not change the counter it updates: each attempt would then see a changed
+value and try again, forever.
 
 ## Bounded counters
 
@@ -132,7 +138,10 @@ on that side. Every write goes through the overflow policy, the initial value in
 The operation returns what it would without bounds, applied to the stored value: `add`
 returns the clamped or wrapped value, `get_and_add` the value before. A failed
 compare-and-set stores nothing and so never checks the range; a successful one stores
-`new` through the policy.
+`new` through the policy. `expect` is compared with the value exactly, never wrapped or
+clamped first: a wrapping counter on `[0, 255]` that holds 44 does not swap on
+`compare_and_exchange(300, 5)`, where an 8-bit compare-exchange in C or JavaScript would
+narrow 300 to 44 and swap.
 
 ```python
 from atomicint import BoundedAtomicInt
@@ -186,11 +195,40 @@ except OverflowError as error:
 
 ## Threads and free threading
 
-Every operation holds the counter's own lock for its whole duration and nothing else, so
-counters never deadlock with each other. The test suite checks the promise under heavy
-contention: every increment returns a distinct value and none is lost, compare-and-set
-lets exactly one thread claim each value, bounded counters never leave their range, and
-recorded histories of all operations mixed together are linearizable.
+An operation holds only the counter's own lock, and runs no Python code while it does,
+so counters never deadlock with each other. That also makes a counter safe to use from a
+`__del__` method, a weakref callback or a signal handler: CPython may run such code in the
+middle of an operation, in the same thread, even one on the same counter, and the
+operation still finishes without losing either update.
+
+```python
+import gc
+
+from atomicint import AtomicInt
+
+open_sessions = AtomicInt()
+
+
+class Session:
+    def __init__(self) -> None:
+        open_sessions.increment()
+        self.me = self  # a reference cycle, so the garbage collector frees it, at any moment
+
+    def __del__(self) -> None:
+        open_sessions.decrement()
+
+
+for _ in range(10_000):
+    Session()
+gc.collect()
+print(open_sessions.get())  # 0
+```
+
+The test suite checks the promise under heavy contention: every increment returns a
+distinct value and none is lost, compare-and-set lets exactly one thread claim each value,
+bounded counters never leave their range, and recorded histories of all operations mixed
+together are linearizable. It also runs every operation while finalizers and signal
+handlers use the same counter, and counts that no update is lost.
 
 On free-threaded CPython the package keeps the GIL disabled; the suite runs on CPython
 3.14t with `sys._is_gil_enabled()` false. Counters are for threads in one process: a

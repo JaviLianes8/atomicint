@@ -6,11 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-21
+## [1.0.0] - 2026-10-22
 
 The first release on PyPI, and the API is now stable: `AtomicInt`, `BoundedAtomicInt`
 and `Overflow`, with the names, signatures, defaults and error types of 0.2.0, are kept
 for the whole 1.x series. Semantic Versioning applies from here on.
+
+### Fixed
+
+- A counter may be used from a `__del__` method, a weakref callback or a signal handler.
+  CPython runs such code in the middle of whatever the thread is doing; before, if it
+  interrupted an operation on the same counter, the program hung forever, because the
+  operation was holding the counter's lock while it ran Python code (range checks,
+  messages, copies). Now no Python code runs while the lock is held: inputs, range
+  checks, messages and update functions are all computed outside it, the new value is
+  stored only if the one it was computed from is still there, and the lock is
+  reentrant. The interrupted operation finishes and neither update is lost.
+- An `__index__` defined as a `classmethod` or `staticmethod` is accepted, as Python
+  itself accepts it; before, it raised a `TypeError` about its arguments. An object that
+  claims to be an `int` through `__class__` is judged by its real type; before, its
+  `__index__` could answer `True` past the `bool` check and store 1.
 
 ### Changed
 
@@ -21,7 +36,7 @@ for the whole 1.x series. Semantic Versioning applies from here on.
   `str(int)` turned the `OverflowError` of a bounded counter, and the `ValueError` for
   `minimum` greater than `maximum`, into an unrelated `ValueError` about that limit, and
   a long policy string or class name was copied into the message whole.
-- `repr()` never fails: values of up to 1800 bits (541 digits) are written in full, larger
+- `repr()` never fails: values of up to 1800 bits (542 digits) are written in full, larger
   ones by their size. Before, the repr of a value past the digit limit raised `ValueError`.
 - The message for an unknown overflow policy reads
   `overflow must be 'raise', 'saturate' or 'wrap', not 'clamp'`.
@@ -31,8 +46,8 @@ for the whole 1.x series. Semantic Versioning applies from here on.
 
 ### Added
 
-- A runnable example in the docstring of every public name, method and property; the
-  examples run as doctests.
+- A runnable example in the docstring of every public name, method and property, the
+  `Overflow` type included; the examples run as doctests.
 - `GUIDE.md`: the full behaviour of every operation, the overflow policies, errors,
   threads, copies and typing.
 - Tests against independent references: Java's `AtomicLong`, `Math.clamp` and narrowing
@@ -46,7 +61,7 @@ for the whole 1.x series. Semantic Versioning applies from here on.
 - `get_and_add(amount)`: add and return the previous value.
 - `compare_and_exchange(expect, new)`: swap if equal and return the value seen, so a
   failed attempt tells the caller what to retry with.
-- `update(fn)` and `get_and_update(fn)`: apply a function atomically. The function runs
+- `update(function)` and `get_and_update(function)`: apply a function atomically. The function runs
   outside the lock and is retried with the fresh value when another thread wins the race.
 - `BoundedAtomicInt`: an `AtomicInt` kept inside `[minimum, maximum]` with an overflow
   policy of `"raise"`, `"saturate"` or `"wrap"`, and the `Overflow` type for it.
@@ -63,7 +78,7 @@ for the whole 1.x series. Semantic Versioning applies from here on.
 - `compare_and_set` rejects a non-integer `expect` instead of comparing it with `==`.
 - `repr()` shows the subclass name.
 
-## [0.1.0]
+## [0.1.0] - 2026-10-11
 
 - First release.
 - `AtomicInt` with `get`, `set`, `add`, `increment`, `decrement`,

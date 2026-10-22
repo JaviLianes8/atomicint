@@ -44,7 +44,8 @@ class Copyable:
     """Copy, deep copy and pickle for a class that keeps its lock in ``_lock``."""
 
     __slots__ = ()
-    _lock: threading.Lock
+    _lock: threading.RLock
+    _value: int
 
     def __reduce__(self) -> tuple[Any, ...]:
         # The lock cannot be pickled. Rebuild without calling __init__, so subclasses
@@ -52,9 +53,14 @@ class Copyable:
         return (copyreg.__newobj__, (type(self),), self.__getstate__())  # type: ignore[attr-defined]
 
     def __getstate__(self) -> State:
+        # The value is read under the lock; the rest is built after it is released, so
+        # a finalizer or signal handler run meanwhile never finds the lock taken.
         with self._lock:
-            return capture(self)
+            value = self._value
+        extra, slots = capture(self)
+        slots["_value"] = value
+        return (extra, slots)
 
     def __setstate__(self, state: State) -> None:
         restore(self, state)
-        object.__setattr__(self, "_lock", threading.Lock())
+        object.__setattr__(self, "_lock", threading.RLock())

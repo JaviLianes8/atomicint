@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import pickle
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -104,3 +105,47 @@ def test_a_bounded_subclass_keeps_bounds_attributes_and_its_name(clone: Clone) -
 def test_an_unset_slot_stays_unset_in_the_copy() -> None:
     twin = copy.copy(Gauge(1))
     assert not hasattr(twin, "unit")
+
+
+class _Private(AtomicInt):
+    """A class name with a leading underscore and a private slot: mangled as _Private__tag."""
+
+    __slots__ = ("__tag",)
+
+    def __init__(self, value: int, tag: str) -> None:
+        super().__init__(value)
+        self.__tag = tag
+
+    @property
+    def tag(self) -> str:
+        return self.__tag
+
+
+def _pickled(protocol: int) -> Clone:
+    return lambda counter: pickle.loads(pickle.dumps(counter, protocol=protocol))
+
+
+PROTOCOLS = [_pickled(protocol) for protocol in range(pickle.HIGHEST_PROTOCOL + 1)]
+
+
+@pytest.mark.parametrize("clone", [copy.copy, copy.deepcopy, *PROTOCOLS])
+def test_a_private_slot_of_an_underscored_subclass_is_copied(clone: Clone) -> None:
+    twin = clone(_Private(3, "blue"))
+    assert (type(twin), twin.tag, twin.get()) == (_Private, "blue", 3)
+
+
+@pytest.mark.parametrize("clone", CLONES)
+def test_a_copy_has_a_lock_of_its_own(clone: Clone) -> None:
+    original = BoundedAtomicInt(1, minimum=0, maximum=9)
+    first, second = clone(original), clone(original)
+    assert len({id(original._lock), id(first._lock), id(second._lock)}) == 3
+    done: list[int] = []
+    with first._lock:
+        # Another thread must not wait for the lock this thread holds on a sibling copy.
+        worker = threading.Thread(
+            target=lambda: done.extend((second.increment(), original.increment())), daemon=True
+        )
+        worker.start()
+        worker.join(timeout=30)
+    assert done == [2, 2]
+    assert first.increment() == 2

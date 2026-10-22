@@ -119,3 +119,17 @@ def test_huge_values_still_compute_exactly() -> None:
     assert counter.get_and_add(HUGE + 5) == 0
     assert counter.get() == 4
     assert AtomicInt(HUGE).compare_and_exchange(HUGE, -HUGE) == HUGE
+
+
+@pytest.mark.parametrize(("size", "cut"), [(59, False), (60, False), (61, True)])
+def test_a_type_name_is_cut_only_past_60_characters(size: int, cut: bool) -> None:
+    odd = type("N" * size, (), {})()
+    text = _message(lambda: AtomicInt(odd), TypeError)
+    assert text == f"value must be an integer, not {'N' * min(size, 60)}{'...' if cut else ''}"
+
+
+@pytest.mark.parametrize(("size", "cut"), [(39, False), (40, False), (41, True)])
+def test_a_policy_is_cut_only_past_40_characters(size: int, cut: bool) -> None:
+    text = _message(lambda: BoundedAtomicInt(0, overflow="p" * size), ValueError)  # type: ignore[arg-type]
+    shown = "'" + "p" * min(size, 40) + "'" + ("..." if cut else "")
+    assert text == f"overflow must be 'raise', 'saturate' or 'wrap', not {shown}"

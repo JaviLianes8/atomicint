@@ -17,11 +17,13 @@ when they are installed, and skip otherwise.
 ## Before you open a pull request
 
 - Keep public API in `src/atomicint/__init__.py`; internals live in `_`-prefixed modules.
-- Add a test for the behaviour you change. Tests inject time, disk and network; they
-  never touch the real thing.
+- Add a test for the behaviour you change. The default run needs no network; a few
+  tests start a fresh interpreter, so a hang fails that test instead of stopping the run.
 - Run `scripts/check.ps1` (format, lint, types, tests) and make sure it passes. Set
   `ATOMICINT_E2E=1` to also build the sdist and wheel, inspect them and drive the
-  installed wheel from a throwaway virtual environment.
+  installed wheel from a throwaway virtual environment. That mode needs the package
+  index: the build is isolated, as a release build is, so it downloads the build backend
+  (`hatchling`).
 - One logical change per commit, imperative subject line.
 
 Open an issue first if the change is large or shifts the public API.

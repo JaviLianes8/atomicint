@@ -3,33 +3,49 @@
 from __future__ import annotations
 
 import operator
-from typing import SupportsIndex
+from typing import Any, SupportsIndex
 
 # An int of at most this many bits has at most 37 decimal digits. Longer ones are
 # described by their size: str() of a huge int is slow, fails past the interpreter's
 # digit limit and would flood the message.
 _MESSAGE_BITS = 120
 _NAME_CHARS = 60
-# repr() writes every digit up to this size (541 digits, below the smallest digit limit
+# repr() writes every digit up to this size (542 digits, below the smallest digit limit
 # Python can be set to), so it never fails; a larger value is described by its size.
 REPR_BITS = 1800
+_MRO = vars(type)["__mro__"]
+_NAMESPACE = vars(type)["__dict__"]
 
 
 def as_int(value: SupportsIndex, name: str) -> int:
+    # The real type, never isinstance: an object can claim any class through __class__.
+    cls = type(value)
     # bool is an int subclass, but a counter set to True is almost always a bug.
-    if isinstance(value, bool):
+    if cls is bool:
         raise TypeError(f"{name} must be an integer, not bool")
-    if isinstance(value, int):
+    if issubclass(cls, int):
         return operator.index(value)
-    hook = getattr(type(value), "__index__", None)
+    hook = _lookup(cls, "__index__")
     if hook is None:
         raise TypeError(f"{name} must be an integer, not {kind(value)}")
-    # Called directly so a hook that answers True is caught here; operator.index
-    # would turn it into 1 with only a deprecation warning.
-    result = hook(value)
-    if isinstance(result, bool) or not isinstance(result, int):
+    # Called here, bound as Python binds it, so a hook that answers True is caught;
+    # operator.index would turn it into 1 with only a deprecation warning.
+    bind = getattr(type(hook), "__get__", None)
+    result = (hook if bind is None else bind(hook, value, cls))()
+    kind_of_result = type(result)
+    if kind_of_result is bool or not issubclass(kind_of_result, int):
         raise TypeError(f"{name} must be an integer, but its __index__ returned {kind(result)}")
     return operator.index(result)
+
+
+def _lookup(cls: type, name: str) -> Any:
+    # The class attribute as the interpreter finds it: along the real MRO, read through
+    # type's own descriptors so a metaclass cannot answer for them.
+    for klass in _MRO.__get__(cls):
+        namespace = _NAMESPACE.__get__(klass)
+        if name in namespace:
+            return namespace[name]
+    return None
 
 
 def kind(value: object) -> str:

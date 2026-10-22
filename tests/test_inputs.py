@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import operator
 from collections.abc import Callable
 from fractions import Fraction
 from typing import Any
@@ -125,3 +126,74 @@ class GivesBig:
 
 def test_an_index_hook_returning_an_int_subclass_is_stored_as_a_plain_int() -> None:
     assert type(AtomicInt(GivesBig()).get()) is int
+
+
+class ClassHook:
+    @classmethod
+    def __index__(cls) -> int:
+        return 3
+
+
+class StaticHook:
+    @staticmethod
+    def __index__() -> int:
+        return 4
+
+
+@pytest.mark.parametrize(("odd", "value"), [(ClassHook(), 3), (StaticHook(), 4)])
+def test_an_index_hook_is_bound_the_way_python_binds_it(odd: Any, value: int) -> None:
+    assert operator.index(odd) == value
+    assert [0, 1, 2, 3, 4][odd] == value
+    counter = AtomicInt(odd)
+    assert (counter.get(), type(counter.get())) == (value, int)
+    assert counter.add(odd) == 2 * value
+
+
+class Pretender:
+    """Claims to be an int through __class__, and answers True from __index__."""
+
+    @property  # type: ignore[misc]
+    def __class__(self) -> type:
+        return int
+
+    def __index__(self) -> int:
+        return True
+
+
+class EmptyPretender:
+    @property  # type: ignore[misc]
+    def __class__(self) -> type:
+        return int
+
+
+class GivesPretender:
+    def __index__(self) -> Any:
+        return Pretender()
+
+
+@pytest.mark.filterwarnings("error")
+def test_a_spoofed_class_does_not_get_past_the_checks() -> None:
+    assert isinstance(Pretender(), int)
+    with pytest.raises(TypeError) as caught:
+        AtomicInt(Pretender())
+    assert str(caught.value) == "value must be an integer, but its __index__ returned bool"
+    with pytest.raises(TypeError) as caught:
+        AtomicInt(EmptyPretender())  # type: ignore[arg-type]
+    assert str(caught.value) == "value must be an integer, not EmptyPretender"
+    with pytest.raises(TypeError) as caught:
+        AtomicInt(GivesPretender())
+    assert str(caught.value) == "value must be an integer, but its __index__ returned Pretender"
+
+
+class Parent:
+    def __index__(self) -> int:
+        return 1
+
+
+class Child(Parent):
+    def __index__(self) -> int:
+        return 2
+
+
+def test_the_nearest_index_hook_in_the_class_hierarchy_wins() -> None:
+    assert AtomicInt(Child()).get() == operator.index(Child()) == 2

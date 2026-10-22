@@ -51,8 +51,8 @@ print(version.compare_and_exchange(7, 10))  # 7
 print(version.get())  # 10
 ```
 
-`update(fn)` applies a function atomically and returns the new value; `get_and_update(fn)`
-returns the old one. The function may run more than once under contention, so keep it
+`update(function)` applies a function atomically and returns the new value;
+`get_and_update(function)` returns the old one. The function may run more than once under contention, so keep it
 free of side effects.
 
 ```python
@@ -117,7 +117,7 @@ lists what changed in each release.
 | `get_and_set(value)` | Replace the value, return the previous one. |
 | `compare_and_set(expect, new)` | Swap if equal to `expect`; `True` if it swapped. |
 | `compare_and_exchange(expect, new)` | Swap if equal to `expect`; return the value seen. |
-| `update(fn)` / `get_and_update(fn)` | Apply `fn` atomically; return the new or previous value. |
+| `update(function)` / `get_and_update(function)` | Apply `function` atomically; return the new or previous value. |
 | `int(counter)`, `operator.index(counter)` | A snapshot of the value. |
 | `BoundedAtomicInt(value=0, *, minimum=None, maximum=None, overflow="raise")` | An `AtomicInt` kept inside a range; exposes `minimum`, `maximum` and `overflow`. |
 | `Overflow` | The type of the overflow policy: `Literal["raise", "saturate", "wrap"]`. |

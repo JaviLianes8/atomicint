@@ -1,4 +1,8 @@
-"""Shared fixtures: the wheel and sdist built once for the end-to-end tests."""
+"""Shared fixtures: the wheel and sdist built once for the end-to-end tests.
+
+The build is isolated, exactly as a release build is, so it downloads the build backend
+from the package index: the end-to-end mode (ATOMICINT_E2E=1) needs network access.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +28,8 @@ def built_dist(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
         text=True,
         check=False,
     )
-    assert done.returncode == 0, done.stdout + done.stderr
+    hint = "the isolated build fetches hatchling from the package index; is it reachable?"
+    assert done.returncode == 0, f"{hint}\n{done.stdout}{done.stderr}"
     (wheel,) = out.glob("atomicint-*.whl")
     (sdist,) = out.glob("atomicint-*.tar.gz")
     return {"wheel": wheel, "sdist": sdist}
