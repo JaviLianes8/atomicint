@@ -60,7 +60,7 @@ from atomicint import AtomicInt
 
 peak = AtomicInt(3)
 for sample in (5, 2, 9, 4):
-    peak.update(lambda current, s=sample: max(current, s))
+    peak.update(lambda current: max(current, sample))
 print(peak.get())  # 9
 ```
 

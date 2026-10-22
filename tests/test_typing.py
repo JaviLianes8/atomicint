@@ -9,7 +9,8 @@ import pytest
 
 api = pytest.importorskip("mypy.api")
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
 
 SNIPPET = """
 from atomicint import AtomicInt, BoundedAtomicInt, Overflow
@@ -81,3 +82,26 @@ def _revealed(output: str, line: int) -> str:
     assert match, output
     # Older mypy releases spell builtins with their module prefix.
     return match.group(1).replace("builtins.", "")
+
+
+def test_the_doc_examples_pass_strict_type_checking(tmp_path: Path) -> None:
+    # The README and GUIDE promise mypy --strict; only a refused input, written on purpose
+    # as the first line of a try block, may be an error.
+    files: list[Path] = []
+    for doc in ("README", "GUIDE"):
+        text = (ROOT / f"{doc}.md").read_text(encoding="utf-8")
+        for number, block in enumerate(re.findall(r"```python\n(.*?)```", text, re.DOTALL)):
+            files.append(tmp_path / f"{doc.lower()}_{number}.py")
+            files[-1].write_text(block, encoding="utf-8")
+    config = tmp_path / "mypy.ini"
+    config.write_text(f"[mypy]\nmypy_path = {SRC.as_posix()}\n", encoding="utf-8")
+    out, err, _ = api.run(
+        ["--strict", "--config-file", str(config), "--cache-dir", str(tmp_path / "cache")]
+        + [str(path) for path in files]
+    )
+    errors = re.findall(r"(\w+)\.py:(\d+): error: (.*)", str(out) + str(err))
+    for name, line, message in errors:
+        lines = (tmp_path / f"{name}.py").read_text(encoding="utf-8").splitlines()
+        assert lines[int(line) - 2].strip() == "try:", (name, lines[int(line) - 1], message)
+    # The refused float and the float update result are there, so errors were read.
+    assert len(errors) >= 3 and len(files) >= 13, str(out) + str(err)
