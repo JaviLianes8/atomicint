@@ -4,27 +4,25 @@ from __future__ import annotations
 
 import copyreg
 import threading
+from types import MemberDescriptorType
 from typing import Any
 
 State = tuple[dict[str, Any] | None, dict[str, Any]]
 
-# Never copied: the lock is replaced, the others are handled by Python itself.
-_SKIPPED = ("_lock", "__dict__", "__weakref__")
-
 
 def slot_names(cls: type) -> list[str]:
-    """Every slot declared along the class hierarchy, private names mangled."""
+    """Every slot Python created along the class hierarchy, except the lock."""
     names: list[str] = []
     for klass in cls.__mro__:
-        declared = klass.__dict__.get("__slots__", ())
-        # Python mangles with the class name stripped of leading underscores, and not at
-        # all when nothing is left (a class named "_" keeps "__tag" as it is).
-        stem = klass.__name__.lstrip("_")
-        for name in (declared,) if isinstance(declared, str) else declared:
-            if stem and name.startswith("__") and not name.endswith("__"):
-                name = f"_{stem}{name}"
-            if name not in _SKIPPED:
-                names.append(name)
+        # Read the slots Python built, not __slots__ itself: that may be an iterator already
+        # used up, and the names come mangled exactly as Python mangled them, whatever the
+        # class is called now. "__dict__" and "__weakref__" are not members, so they never
+        # appear: capture() takes the instance dictionary on its own.
+        for member in vars(klass).values():
+            if isinstance(member, MemberDescriptorType) and member.__objclass__ is klass:
+                name = member.__name__
+                if name != "_lock" and name not in names:
+                    names.append(name)
     return names
 
 

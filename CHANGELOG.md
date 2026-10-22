@@ -32,9 +32,11 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   itself accepts it; before, it raised a `TypeError` about its arguments. An object that
   claims to be an `int` through `__class__` is judged by its real type; before, its
   `__index__` could answer `True` past the `bool` check and store 1.
-- Copies and pickles of a subclass whose name is only underscores (such as `_`) keep its
-  private slots (`__tag`). Before, the copy looked for a mangled name Python never uses
-  for such a class and silently left the attribute out.
+- Copies and pickles of a subclass keep every slot Python created for it. Before, the
+  copy read the names back from `__slots__` and mangled the private ones itself, so it
+  silently left an attribute out when `__slots__` was an iterator (used up when the class
+  was made), when the class was renamed after it was made, or when its name was only
+  underscores (such as `_`), where Python does not mangle `__tag` at all.
 
 ### Changed
 
