@@ -37,7 +37,12 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   for it; before, such a hook was called unbound and its result stored. The lookup
   reads each class dictionary once, as Python's does, so a hook that another thread adds
   or deletes meanwhile (on a free-threaded build) is taken, or refused with the
-  documented `TypeError`, never with a `KeyError`.
+  documented `TypeError`, never with a `KeyError`. The first class along the MRO that
+  holds `__index__` (or, on the hook's class, `__get__`) decides whatever object it holds,
+  so a subclass can no longer fall through to its base's hook by holding one particular
+  object, and a class dictionary key whose comparison raises ends the search with no hook
+  found, as in Python: the documented `TypeError` (or an unbound call of the hook), never
+  the comparison's own exception.
 - Error messages and `repr()` use the name Python keeps for a class, as Python's own
   messages do, and a name given as a `str` subclass (by `type()` or by assigning
   `__name__`) is read as the plain text it holds. Before, a metaclass that answers for

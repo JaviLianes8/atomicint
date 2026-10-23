@@ -17,8 +17,6 @@ REPR_BITS = 1800
 MRO = vars(type)["__mro__"]
 NAMESPACE = vars(type)["__dict__"]
 _NAME = vars(type)["__name__"]
-# What _lookup returns for a name no class along the MRO holds: a class may hold None.
-_MISSING: Any = object()
 
 
 def as_int(value: SupportsIndex, name: str) -> int:
@@ -29,29 +27,37 @@ def as_int(value: SupportsIndex, name: str) -> int:
         raise TypeError(f"{name} must be an integer, not bool")
     if issubclass(cls, int):
         return operator.index(value)
-    hook = _lookup(cls, "__index__")
-    if hook is _MISSING or hook is None:
+    found = _lookup(cls, "__index__")
+    if not found or found[0] is None:
         raise TypeError(f"{name} must be an integer, not {kind(value)}")
+    hook = found[0]
     # Called here, bound as Python binds it, so a hook that answers True is caught;
     # operator.index would turn it into 1 with only a deprecation warning.
-    # A __get__ that is there is called, as Python calls it, even when it is None.
+    # A __get__ that is there is called, as Python calls it, whatever it is.
     bind = _lookup(type(hook), "__get__")
-    result = (hook if bind is _MISSING else bind(hook, value, cls))()
+    result = (bind[0](hook, value, cls) if bind else hook)()
     kind_of_result = type(result)
     if kind_of_result is bool or not issubclass(kind_of_result, int):
         raise TypeError(f"{name} must be an integer, but its __index__ returned {kind(result)}")
     return operator.index(result)
 
 
-def _lookup(cls: type, name: str) -> Any:
-    # The class attribute as the interpreter finds it: along the real MRO, never through
-    # the metaclass. One read per class, as Python's own lookup makes: between two reads
-    # another thread may delete the name, or a key equal to it may change its answer.
+def _lookup(cls: type, name: str) -> tuple[Any, ...]:
+    # The class attribute as the interpreter finds it, as a 1-tuple, or () when there is
+    # none: a class may hold any object, None or one of ours included, so no value can
+    # stand for "absent". Along the real MRO, never through the metaclass, one read per
+    # class: between two reads another thread may delete the name, or a key equal to it
+    # may change its answer. A key that fails to compare ends the search with nothing
+    # found, as Python's own lookup does; an interrupt or exit still goes through.
+    absent = object()
     for klass in MRO.__get__(cls):
-        found = NAMESPACE.__get__(klass).get(name, _MISSING)
-        if found is not _MISSING:
-            return found
-    return _MISSING
+        try:
+            found = NAMESPACE.__get__(klass).get(name, absent)
+        except Exception:
+            return ()
+        if found is not absent:
+            return (found,)
+    return ()
 
 
 def class_name(cls: type) -> str:

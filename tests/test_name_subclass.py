@@ -20,18 +20,9 @@ def _refuse(*args: Any) -> Any:
     raise RuntimeError("hostile name")
 
 
-# Every way to read the text back from a str subclass: none may be used.
-READERS: tuple[str, ...] = (
-    "__len__",
-    "__format__",
-    "__getitem__",
-    "__str__",
-    "__add__",
-    "__radd__",
-    "__iter__",
-)
-READERS += ("__repr__", "__mod__", "__rmod__", "__mul__", "__contains__", "__getnewargs__")
-READERS += ("lstrip", "encode", "join", "format", "split", "replace", "casefold", "translate")
+# Any method a str has could be used to read the text back, so every one refuses; only
+# __new__, which makes the name, is left alone.
+READERS = tuple(sorted(m for m, v in vars(str).items() if callable(v) and m != "__new__"))
 HOSTILE = {method: _refuse for method in READERS}
 Raising: Any = type("Raising", (str,), HOSTILE)
 SECRET = "sk_live_SECRET_" + "A" * 10_000
