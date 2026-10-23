@@ -15,8 +15,9 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e, every Python on this PC (items 8, 10, 13, 14)
 - [x] Gates (item 15)
-- [ ] Five QA lenses report PASS (item 19)
-- [ ] Independent reviewer reports PASS (item 16)
+- [x] Five QA lenses report PASS (item 19)
+- [x] Independent reviewer reports PASS (item 16)
+- [x] Final gates, build, `twine check` and installed-wheel suite from a fresh clone of the pushed branch
 - [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Scorecard
@@ -34,14 +35,14 @@ Progress:
 | 9 | Seeded fuzz, no crash, hang or blowup | PASS |
 | 10 | Supported Pythons | PASS: CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2, 3.14.2t; 3.8 and 3.9 are below `requires-python`; no 3.13t on this PC |
 | 11 | README and `twine check` | PASS: `twine check --strict` PASSED for both files |
-| 12 | Dated CHANGELOG section | PASS: `## [1.0.0] - 2026-10-22` (moved from 2026-10-21 in QA round 1; it must name the upload day if that is later) |
+| 12 | Dated CHANGELOG section | PASS: `## [1.0.0] - 2026-10-23`, the day of the last 1.0.0 commits (moved from 2026-10-21 in QA round 1 and from 2026-10-22 at the final check; it must name the upload day if that is later) |
 | 13 | pyproject 1.0.0, Production/Stable | PASS |
 | 14 | sdist and wheel contents | PASS |
 | 15 | Gates each exit 0 | PASS: see Gates |
-| 16 | Independent reviewer | pending (orchestrator) |
+| 16 | Independent reviewer | PASS: every item scored PASS at 09e1fd8 (see Final verification) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
 | 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them); after QA round 7, lens e's seven survivors and five mutants of the new code, all killed; after QA round 8, lens e's two survivors (Q11, Q16) and eight mutants of the new code and tests, all killed; after QA round 9, lens e's six survivors (S10, C01 to C05), four more readers of the class name and nine mutants of the new lookup, all killed; after QA round 10, lens e's six survivors (C06, A02, L02, L03, L05, L15), all killed by new contracts |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; round 7 (lenses a, c, d and e at 3d26d7b): every round 6 finding confirmed fixed, 12 new findings (10 distinct: three lenses reported the same `__get__ = None` gap) plus a closed re-check and a summary, all fixed, none disputed; round 8 (lenses a, c and e at caf7b6d): every round 7 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported the same double read of a class dictionary) plus three closed re-checks, all fixed, none disputed; round 9 (lenses a, c and e at 0cf40ba): every round 8 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported two sides of the same lookup gap) plus four closed re-checks, all fixed, none disputed; round 10 (lenses a, c and e at c01980d): every round 9 finding confirmed fixed, 7 new findings (5 distinct: the three lenses reported the same docs claim about an interrupt from a failing key) plus five closed re-checks, all fixed, none disputed; re-verification by the lenses pending |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; round 7 (lenses a, c, d and e at 3d26d7b): every round 6 finding confirmed fixed, 12 new findings (10 distinct: three lenses reported the same `__get__ = None` gap) plus a closed re-check and a summary, all fixed, none disputed; round 8 (lenses a, c and e at caf7b6d): every round 7 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported the same double read of a class dictionary) plus three closed re-checks, all fixed, none disputed; round 9 (lenses a, c and e at 0cf40ba): every round 8 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported two sides of the same lookup gap) plus four closed re-checks, all fixed, none disputed; round 10 (lenses a, c and e at c01980d): every round 9 finding confirmed fixed, 7 new findings (5 distinct: the three lenses reported the same docs claim about an interrupt from a failing key) plus five closed re-checks, all fixed, none disputed; final verification: all five lenses report PASS (see Final verification) |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -718,3 +719,74 @@ Verification:
 
 Commits of this round: ffb2bbb (contracts, GUIDE and CHANGELOG) and the commit that
 records this section.
+
+## Final verification (items 16 and 19)
+
+After round 10 every lens ran once more, each in its own clone, and an independent
+reviewer scored the whole list. Their reports and evidence (scripts, logs, fetched copies)
+are kept outside the repository, in the certification workspace `atomicint-cert/`; the
+paths below are relative to it. The commit is the one each final run checked out.
+
+| Lens | Runs | Final verdict | Report and evidence | Commit |
+| --- | --- | --- | --- | --- |
+| a, API and docs | 6 | PASS: rounds 9 and 10 findings fixed, 9 more probes found nothing, every README and GUIDE block prints its comments on 3.10.19, 3.13.2 and 3.14.2t | `lens-a-r6/REPORT.md` | 09e1fd8 |
+| b, correctness and ground truth | 1 | PASS: the 9 manifest URLs re-fetched with every hash matching; its own Java 21 and Node.js 24 oracles, 0 differences over 348,604 operations on 3.13 and 35,281 each on 3.10, 3.12, 3.14 and 3.14t, all 3 seeded source mutants caught; 60,000 random `long` triples matched `Math.clamp`, `Math.floorMod` and `Math.addExact` | `lens-b-r1/r5` (drivers), `lens-b-r1/fetched-r5` (sources) | a270808 |
+| c, adversarial and robustness | 6 | PASS: 10 checks on 3.10 to 3.14 and 3.14t (interrupts and exits from failing keys on every entry point, secrets never in messages, 3,000 seeded fuzz cases, 50-deep MROs, a 40,000-call race, cost linear in MRO depth) | `lens-c-r6/probes/run-r6b.out` | 09e1fd8 |
+| d, packaging and e2e | 3 | PASS: wheel and sdist venvs on 3.10.19 to 3.14.2 and 3.14.2t, reproducible builds on two machines (members identical), `twine check --strict`, 65-file sdist, the e2e suite with no stray files | `lens-d-r3/out` | caf7b6d |
+| e, contract strength | 6 | PASS: its own 14 mutants (L02, L03, L05, L15, N01 to N10) each killed after an unmutated baseline passed (CPython 3.14.2, another machine) | `lens-e-r6/logs`, `lens-e-r6/tools` | 09e1fd8 |
+| Independent reviewer | 1 | PASS: all 19 items (below) | `review-r1/out`, `review-r1/scripts` | 09e1fd8 |
+
+Lenses b and d ran their final pass on earlier commits. Between those commits and 09e1fd8
+the library changed only in the class dictionary lookup and the class name reader, which
+lenses a, c and e re-checked at 09e1fd8, and the reviewer re-ran the oracles, packaging
+and e2e at 09e1fd8.
+
+Lens b reported one observation, not a defect: when `__index__` returns a strict `int`
+subclass, CPython's `operator.index` returns its value with a `DeprecationWarning`, while
+a counter takes the same value without the warning (the GUIDE says an `int` subclass is
+stored as a plain `int`). Kept: the value is the same, and the warning announces a
+future Python change, not a wrong input.
+
+### Reviewer scorecard at 09e1fd8
+
+| # | Item | Result |
+| --- | --- | --- |
+| 1 | Stable API | PASS: 3 names, `AtomicInt(value=0)` with 11 methods, `BoundedAtomicInt(value=0, *, minimum, maximum, overflow="raise")` with 3 read-only properties, signatures pinned in `test_contract_api`, every change in CHANGELOG 1.0.0 |
+| 2 | `__all__` | PASS: exactly `AtomicInt`, `BoundedAtomicInt`, `Overflow`; the docs import only from `atomicint` |
+| 3 | Docstrings and doctests | PASS: an example on every public name, method and property; 18 doctests; `test_docs` runs the README and GUIDE blocks |
+| 4 | Typing | PASS: `mypy --strict` on `src` and on `src` with `tests`, `py.typed` in the wheel, no `Any` in public annotations, `test_typing` |
+| 5 | Errors | PASS: built-in `TypeError`, `ValueError`, `OverflowError` in the GUIDE table; 11 hostile inputs (`10**100000`, 1 MB strings, a 100,000-character class name, a secret in an update result) gave messages of at most 200 characters with no input leaked |
+| 6 | Contracts | PASS: `test_contract`, `test_contract_api` and the behaviour files cover every method, failure paths included |
+| 7 | Ground truth | PASS: the 9 manifest URLs re-fetched, every sha256 matching; Java 21.0.8 and Node.js 24.18.0 oracles run live; hand-written data labelled; nothing third-party committed or shipped |
+| 8 | Real e2e | PASS: the wheel installed with `--no-index` into fresh venvs on 6 interpreters and driven from an empty folder with `-I -W error` (8 threads x 20,000 operations giving exactly 160,000, wrap, saturate, the raise message, `TypeError`s, pickle, deepcopy); no CLI; no PyPI release to upgrade from |
+| 9 | Fuzz | PASS: seeded fuzz and linearizability tests, huge-input and class-cost tests, all within the 300 s timeout |
+| 10 | Pythons | PASS: 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 (1075 passed, 13 skipped each), 3.14.2t with the GIL disabled (1079 passed, 9 skipped), 3.14.2 on another machine with the e2e tests; 3.8 and 3.9 are below `requires-python`; 3.13t and 3.15 are not on this PC |
+| 11 | README | PASS: `twine check --strict`, rendered cleanly, absolute links; competitor facts checked live (PyPI JSON for 7 packages, one sdist and one wheel read) |
+| 12 | CHANGELOG | PASS: dated 1.0.0 section with a stability statement |
+| 13 | pyproject | PASS: 1.0.0, Production/Stable, Python 3.10 to 3.14 and free threading, MIT with `license-files`, the 4 URLs, 15 keywords, `dependencies = []` |
+| 14 | Contents | PASS: the wheel holds the 7 package files and the dist-info with the licence; the 65-file sdist ships only the manifest of the fetched folder |
+| 15 | Gates | PASS: `ruff format --check` (58 files), `ruff check`, `mypy --strict src`, `pytest` each exit 0 |
+| 16 | Review | PASS |
+| 17 | PR | PR #3 open from `release/1.0.0`; merge and publish left to the maintainer |
+| 18 | Mutations | PASS: `CERT-1.0-MUTANTS.md` has 230 rows, every survivor closed by a contract or explained as equivalent; the reviewer's own sample killed 12 of 13 (table below) |
+| 19 | QA lenses | PASS: the evidence of all five final runs exists and matches the verdicts |
+
+The reviewer's own mutants, each alone on a copy of 09e1fd8:
+
+| Id | Mutation | Killed by |
+| --- | --- | --- |
+| M1 | the `_add` fast path test `<= ceiling` made `<` | not killed, equivalent: the slow path stores the same value |
+| M2 | wrap modulus off by one | doctest |
+| M3 | saturate uses the wrong bound | doctest |
+| M4 | `compare_and_exchange` returns the new value | doctest |
+| M5 | a single-value range (`minimum == maximum`) refused | `test_a_single_value_range_is_allowed` |
+| M6 | `_add` stores without the range check | `test_bounded_stress` (wrap) |
+| M7 | the upper bound check made `>= high` | doctest |
+| M8 | `_exchange` stores without the range check | `test_linearizability[wrap]` |
+| M9 | `get_and_update` returns the new value | doctest |
+| M10 | `compare_and_set` compares with `is` | `test_compare_and_set_compares_values_not_objects` |
+| M11 | `_store` returns the new value | doctest |
+| M12 | the slow path gives up after one retry | `test_bounded_stress` |
+| M13 | `_apply` stores without the range check | `test_linearizability[None]` |
+
+Every item of the list is PASS. Merge and the PyPI upload are left to the maintainer.

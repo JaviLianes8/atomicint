@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-10-22
+## [1.0.0] - 2026-10-23
 
 The first release on PyPI, and the API is now stable: `AtomicInt`, `BoundedAtomicInt`
 and `Overflow`, with the names, signatures and defaults of 0.2.0 and the error types
