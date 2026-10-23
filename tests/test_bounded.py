@@ -108,7 +108,7 @@ def test_a_single_value_range_is_allowed() -> None:
     ("kwargs", "message"),
     [
         ({"minimum": 5, "maximum": 4}, "greater than maximum"),
-        ({"overflow": "clamp"}, "overflow must be one of"),
+        ({"overflow": "clamp"}, "overflow must be "),
         ({"overflow": "wrap", "maximum": 9}, "needs both"),
         ({"overflow": "wrap", "minimum": 0}, "needs both"),
     ],
@@ -134,7 +134,14 @@ class Anything:
     __hash__ = object.__hash__
 
 
-@pytest.mark.parametrize("policy", [Loud("raise"), Anything(), None, 1])
-def test_the_overflow_policy_must_be_one_of_the_exact_names(policy: Any) -> None:
-    with pytest.raises(ValueError, match="overflow must be one of"):
+@pytest.mark.parametrize("policy", [Loud("raise"), Anything(), None, 1, b"wrap"])
+def test_a_policy_that_is_not_a_plain_str_raises_type_error(policy: Any) -> None:
+    # Like every other argument of the wrong type; a str subclass could compare oddly.
+    with pytest.raises(TypeError, match="overflow must be a plain str, not "):
+        BoundedAtomicInt(0, overflow=policy)
+
+
+@pytest.mark.parametrize("policy", ["clamp", "", "Wrap", "raise "])
+def test_an_unknown_policy_name_raises_value_error(policy: Any) -> None:
+    with pytest.raises(ValueError, match="overflow must be 'raise', 'saturate' or 'wrap', not "):
         BoundedAtomicInt(0, overflow=policy)

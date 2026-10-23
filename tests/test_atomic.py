@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from atomicint import AtomicInt
+import pytest
+
+from atomicint import AtomicInt, BoundedAtomicInt
 
 
 def test_get_returns_the_initial_value() -> None:
@@ -92,3 +94,16 @@ def test_int_and_index_give_a_snapshot() -> None:
 def test_atomic_ints_compare_by_identity() -> None:
     assert AtomicInt(1) != AtomicInt(1)
     assert len({AtomicInt(1), AtomicInt(1)}) == 2
+
+
+@pytest.mark.parametrize("cls", [AtomicInt, BoundedAtomicInt])
+def test_compare_and_set_compares_values_not_objects(cls: type[AtomicInt]) -> None:
+    for value in (1000, 10**30):
+        stored, expected = int(str(value)), int(str(value))
+        assert stored == expected and stored is not expected
+        counter = cls(stored)
+        assert counter.compare_and_exchange(expected, 7) == value
+        assert counter.get() == 7
+        counter.set(int(str(value)))
+        assert counter.compare_and_set(int(str(value)), 8) is True
+        assert counter.get() == 8
