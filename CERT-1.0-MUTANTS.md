@@ -361,3 +361,19 @@ All 19 are killed.
 | T7 | `found[0] == None` for `found[0] is None` | killed: `tests/test_lookup_absent.py::test_a_found_hook_is_judged_by_identity_never_by_equality[equal]` |
 | T8 | a read that raises answers `(None,)` | killed: `tests/test_lookup_absent.py::test_a_hook_class_that_fails_to_answer_for_get_is_called_unbound` |
 | T9 | a class holding `None` treated as not holding the name | killed: `tests/test_index_lookup.py::test_a_hook_whose_class_sets_get_to_none_is_refused_as_python_refuses_it` |
+
+## After QA round 10
+
+Lens e's six survivors of its round 10 run, under its own ids (its C06 is not the C06
+above). Each was applied alone to a copy of ffb2bbb and run with `-x` (CPython 3.13.2)
+against the lookup, class name and index lookup tests, after an unmutated baseline run
+that passed. All 6 are killed.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| C06 (lens e) | `class_name()` returns `"" + name` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| A02 | `not found[0]` for `found[0] is None` in `as_int` | killed: `tests/test_lookup_absent.py::test_a_found_hook_is_judged_by_identity_never_by_equality_or_truth[Falsy-equal]` |
+| L02 | `_lookup` catches `BaseException` | killed: `tests/test_lookup_absent.py::test_an_interrupt_or_exit_from_a_failing_key_reaches_the_caller[KeyboardInterrupt]` |
+| L03 | `_lookup` catches only `ArithmeticError`, `LookupError`, `RuntimeError`, `TypeError` and `ValueError` | killed: `tests/test_lookup_absent.py::test_a_class_dict_that_fails_to_answer_has_no_hook[custom]` |
+| L05 | `_lookup` reads `ns[name]` and goes on to the next class on a `KeyError` | killed: `tests/test_lookup_absent.py::test_a_class_dict_that_fails_to_answer_has_no_hook[key error]` |
+| L15 | `_lookup` searches `dict(ns)`, a copy | killed: `tests/test_lookup_absent.py::test_a_failing_key_stored_after_the_hook_does_not_hide_it` |
