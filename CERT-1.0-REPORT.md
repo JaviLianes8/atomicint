@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them); after QA round 7, lens e's seven survivors and five mutants of the new code, all killed |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; round 7 (lenses a, c, d and e at 3d26d7b): every round 6 finding confirmed fixed, 12 new findings (10 distinct: three lenses reported the same `__get__ = None` gap) plus a closed re-check and a summary, all fixed, none disputed; re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them); after QA round 7, lens e's seven survivors and five mutants of the new code, all killed; after QA round 8, lens e's two survivors (Q11, Q16) and eight mutants of the new code and tests, all killed |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; round 7 (lenses a, c, d and e at 3d26d7b): every round 6 finding confirmed fixed, 12 new findings (10 distinct: three lenses reported the same `__get__ = None` gap) plus a closed re-check and a summary, all fixed, none disputed; round 8 (lenses a, c and e at caf7b6d): every round 7 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported the same double read of a class dictionary) plus three closed re-checks, all fixed, none disputed; re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -585,3 +585,54 @@ Verification:
 
 Commits of this round: a6bc329 (sentinel lookup, plain class name, contracts, README,
 CHANGELOG, GUIDE) and the commit that records this section.
+
+### Round 8 (lenses a, c and e at caf7b6d)
+
+Every round 7 finding was re-checked and found fixed: lens a's README sentence about
+`atomos` (run in a throwaway venv) and the `__get__ = None` case with 18 more variants on
+CPython 3.10.19, 3.13.2 and 3.14.2t; lens c's N1 and N2 on 3.10 to 3.14t; lens e's eight
+earlier findings, each earlier survivor now killed on CPython 3.14.2. Lens a ran about 45
+checks of the class name and the index lookup, lens c ran a free-threaded race on the
+lookup, lens e ran a new mutation round. They found one defect in the lookup (reported by
+two lenses) and two mutants no contract killed.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| a | N1-recheck, N2-recheck | low | Round 7's N1 and N2 are fixed | Nothing to change |
+| a, c | N3, N3 | low | `_lookup` read each class dictionary twice (`name in namespace`, then `namespace[name]`). A key whose equality changes its answer between the two reads (lens a), or another thread deleting the attribute between them on 3.14t (lens c: about 1 call in 100), let a `KeyError` out of the constructor, the operations and the bounds instead of the hook or the documented `TypeError` | `_lookup` reads each class once with `.get(name, sentinel)`, as `_state` already reads `__slots__`. `tests/test_index_lookup.py::test_each_class_dict_is_read_once_so_a_changing_key_cannot_raise_key_error`: a key that says "equal" and then "not equal" (constructor, operation, bound), a key that never matches (refused, value unchanged), and three answer scripts where either outcome is right but a `KeyError` or a change on refusal is not. `tests/test_lookup_race.py` (free-threaded builds only): 100000 calls while another thread adds and deletes `__index__`, and 100000 while it adds and deletes the hook's `__get__`. CHANGELOG "Fixed" and GUIDE inputs |
+| e | RECHECK-ALL | low | All eight round 7 findings are fixed | Nothing to change |
+| e | H1 | low | Mutant Q11 (`class_name()` returns `"".join(name)`) survived: the hostile name overrode only six of the methods that read its text | The hostile name in `tests/test_name_subclass.py` now refuses 21 readers (`__iter__`, `__repr__`, `encode`, `__mod__`, `join`, `format`, `split` and `replace` among them) for the same messages, `repr()` and copies |
+| e | H2 | low | Mutant Q16 (the hook bound without its owner class) survived | `test_the_hook_is_bound_with_the_value_and_its_own_type`: a `__get__` that needs the owner and checks it is the value's type, and one whose owner is optional and changes the answer, on the class and on a subclass, through the constructor, every operation and the bounds |
+
+On lens a's expected outcome for N3: its repro expects the counter to refuse with
+`TypeError`, as `operator.index` does. That answer comes from the slot Python filled when
+the class was made, from an earlier answer of the same key: in a probe on CPython 3.13.2
+the key was asked once when the class was made, `operator.index` asked it zero times, and
+the fixed counter asked it once and took the hook (7). The counter looks the hook up on
+each call, so for such a key the two can differ; what the fix guarantees, and the new
+contract pins, is that the input is taken, or refused with `TypeError`, never with a
+`KeyError`. The GUIDE now says so. The same probe showed that one dict lookup may ask a key
+twice (with `PYTHONHASHSEED=7` its probe passed the same slot twice), so the contract does
+not count how often a key is asked.
+
+H1 and H2 are missing contracts, not defects: the code was right and is unchanged for
+them. No finding is disputed.
+
+Verification:
+
+- Red before the fix: on the caf7b6d sources the new single read test fails with
+  `KeyError: '__index__'` under `PYTHONHASHSEED` 0 to 11 (CPython 3.13.2), and both race
+  tests fail with `KeyError` on 3.14.2t. On the fixed tree the changed files and
+  `tests/test_metaclass.py` pass on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2 and 3.14.2
+  (131 passed, 2 skipped: the race tests) and on 3.14.2t (133 passed).
+- Mutants: lens e's two survivors and eight mutants of the new code and tests, each alone
+  on a copy of the fixed tree, all killed
+  ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Gates at 0f334ee on another machine from a fresh clone, CPython 3.14.2: `ruff format
+  --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest`
+  (1032 passed, 43 skipped: the seven e2e tests, the four free-threading and race tests,
+  the five Java oracle tests with no Java there, and 27 tests of the fetched reference
+  files, not present there) each exit 0.
+
+Commits of this round: d34610e (single read lookup, contracts, CHANGELOG, GUIDE), 0f334ee
+(either outcome of a key asked twice) and the commit that records this section.

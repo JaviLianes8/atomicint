@@ -306,3 +306,26 @@ killed.
 | P10 | `class_name()` returns the kept name as is | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
 | P11 | `_lookup` returns `None` for a missing name | killed: `tests/test_metaclass.py::test_an_index_hook_is_bound_as_python_binds_it_whatever_its_metaclass_says` |
 | P12 | `class_name()` returns `str()` of the kept name | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+
+## After QA round 8
+
+`_lookup` now reads each class dictionary once, the hostile class name refuses every way
+to read its text, and a contract binds the hook with an owner that matters. Q11 and Q16
+are lens e's two survivors of its round 8 mutation run; R1 to R8 mutate the new code and
+what the new tests pin. Each was applied alone to a copy of the fixed tree at 0f334ee and
+run with `-x` on another machine (CPython 3.14.2) against the index lookup, class name,
+metaclass, input, message, class hook and copy tests, after an unmutated baseline run
+(401 passed). All 10 are killed.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| Q11 | `class_name()` returns `"".join(name)` (lens e's) | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| Q16 | the hook bound as `bind(hook, value)`, without the owner (lens e's) | killed: `tests/test_index_lookup.py::test_the_hook_is_bound_with_the_value_and_its_own_type[needs]` |
+| R1 | `_lookup` reads twice again (`in`, then `[]`) | killed: `tests/test_index_lookup.py::test_each_class_dict_is_read_once_so_a_changing_key_cannot_raise_key_error` |
+| R2 | the owner passed is `type(hook)` | killed: `tests/test_index_lookup.py::test_the_hook_is_bound_with_the_value_and_its_own_type[needs]` |
+| R3 | the owner passed is `None` | killed: `tests/test_index_lookup.py::test_the_hook_is_bound_with_the_value_and_its_own_type[needs]` |
+| R4 | `_lookup` stops at a value that is not `None` instead of not the sentinel | killed: `tests/test_index_lookup.py::test_an_inherited_index_hook_is_found[one level]` |
+| R5 | `class_name()` returns `name.encode().decode()` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| R6 | `class_name()` returns `name.replace('', '')` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| R7 | `class_name()` returns `'%s' % (name,)` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| R8 | `_lookup` tries `[]`, and after a miss reads with `.get` and then `[]` | killed: `tests/test_index_lookup.py::test_each_class_dict_is_read_once_so_a_changing_key_cannot_raise_key_error` |
