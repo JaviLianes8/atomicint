@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them) |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them); after QA round 7, lens e's seven survivors and five mutants of the new code, all killed |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; round 7 (lenses a, c, d and e at 3d26d7b): every round 6 finding confirmed fixed, 12 new findings (10 distinct: three lenses reported the same `__get__ = None` gap) plus a closed re-check and a summary, all fixed, none disputed; re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -534,3 +534,54 @@ Verification:
 Commits of this round: ce86c58 (class data read as Python keeps it, contracts, CHANGELOG,
 GUIDE), a33dca1 (linearizability of every operation and policy, README), 026bd39 (e2e type
 check), and the commit that records this section.
+
+### Round 7 (lenses a, c, d and e at 3d26d7b)
+
+Every round 6 finding was re-checked by its own lens and found fixed: lens a's README
+comparison and linearizability scope (its own linearizability checker found 0 of 1200
+histories wrong on 3.13.2 and 3.14.2t), lens c's C1 and C2 on 3.10 to 3.14t and C3 resolved
+in the GUIDE, lens d's e2e type check (3 passed from a fresh sdist on three interpreters,
+no cache left in the project), and lens e's S10. Lens a ran every README and GUIDE block
+and the doctests; lens c ran 29 hostile scenarios; lens d rebuilt the wheel and sdist
+reproducibly, ran a 128-check consumer from both on six interpreters and the suite from
+the sdist; lens e ran a new mutation round. Together they found one wrong word in the
+README, one gap in the `__index__` lookup (reported by three lenses), one in how a class
+name is read, and seven mutants no contract killed.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| a | N1 | low | README said `atomos` needs `six` and `tox` installed at run time; it lists `tox` as an install dependency but never imports it | README: it imports `six` at run time and also lists `tox` as an install dependency, which it never imports |
+| a, c, d | N2, N2, F2 | low | An `__index__` hook whose class sets `__get__ = None` was called unbound and its result stored; Python calls that `None` and raises `TypeError`. `_lookup` returned `None` both for a missing name and for one set to `None` | `_lookup` returns a private sentinel for a missing name. A `__get__` that is there is called as Python calls it, so `None` raises Python's own `TypeError` ("'NoneType' object is not callable"); an `__index__` set to `None` is refused with the documented message. `tests/test_index_lookup.py`: both cases against `operator.index`, for the constructor, an operation and a bound, with the value left unchanged. CHANGELOG "Fixed" and GUIDE inputs |
+| c | N1 | low | `class_name()` returned the name Python keeps as is; that may be a `str` subclass (from `type()` or by assigning `__name__`), whose methods turned the documented `TypeError` into a `RuntimeError`, put text of any length (a secret, 10M characters) into the message, made `repr()` raise, or stopped a subclass of the counter from being made | `class_name()` returns `str.__str__` of that name, a plain copy of the text, as `_listed` already does for slot names. `tests/test_name_subclass.py`: a raising and a lying name for the input, hook result, update result and policy messages, the 60-character cut, a subclass made, shown and deep-copied, and `repr()` after a rename. CHANGELOG "Fixed" and GUIDE errors |
+| d | NOTE-recheck-summary | low | Summary of what passed, not a defect | Nothing to change |
+| e | F1-recheck | low | S10 is killed: the round 6 finding is closed | Nothing to change |
+| e | G1 | medium | Mutant N13 (`_lookup` reads only the class's own namespace) survived: no contract covered an `__index__` inherited from a base | `tests/test_index_lookup.py::test_an_inherited_index_hook_is_found`: one and two levels up, through the constructor, every operation that takes an integer and the bounds |
+| e | G2 | low | Mutant N11 (`_lookup` walks `cls.__mro__`) survived | `test_a_metaclass_mro_cannot_hide_an_inherited_index_hook`, under each hostile `__mro__` answer of `tests/test_metaclass.py` |
+| e | G3 | low | Mutant N14 (`_lookup` reads `vars(klass)`) survived | `test_a_metaclass_namespace_cannot_hide_or_replace_an_index_hook`: a metaclass `__dict__` answering `{}` or another hook |
+| e | G4 | low | Mutant N12 (`_lookup` walks `type.mro(cls)`) survived | `test_the_hook_comes_from_the_order_a_metaclass_mro_made`: a metaclass `mro()` that reorders two hooked bases |
+| e | G5 | low | Mutant N17 (`_listed` reads an inherited `__slots__`) survived | `tests/test_slot_mro.py::test_an_inherited_slots_list_adds_no_attribute_to_a_copy`: a subclass without `__slots__` under a base with a private slot, for both classes, copy, deepcopy and every pickle protocol |
+| e | G6 | low | Mutant N21 (`_collect` walks `type.mro(cls)`) survived | `test_a_slot_of_a_base_left_out_of_the_mro_is_not_copied`: a metaclass `mro()` drops a slotted base |
+| e | G7 | low | Mutant N24 (covered bases taken from `type.mro(klass)`) survived | `test_a_base_whose_mro_leaves_a_slotted_class_out_does_not_hide_its_slots` |
+
+G1 to G7 are missing contracts, not defects: the code was right and is unchanged for
+them. No finding is disputed.
+
+Verification:
+
+- Red before the fix: the three new test files run against the 3d26d7b sources (CPython
+  3.13.2): 10 failed, 57 passed. The failures are the `__get__ = None` case and the nine
+  `str` subclass name cases (`RuntimeError`, the injected text in `repr()`); the 57 that
+  pass on both trees pin lens e's mutants and the refused `__index__ = None`. On the
+  fixed tree the three files and `tests/test_metaclass.py` pass on CPython 3.10.19,
+  3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2t (176 passed on each).
+- Mutants: lens e's seven survivors and five mutants of the new code, each alone on a
+  copy of the fixed tree, all killed
+  ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+- Gates at a6bc329 on another machine from a fresh clone, CPython 3.14.2: `ruff format
+  --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest`
+  (1029 passed, 41 skipped: the seven e2e tests, which this round's changes do not touch,
+  the two free-threading tests, the five Java oracle tests with no Java there, and 27
+  tests of the fetched reference files, not present there) each exit 0.
+
+Commits of this round: a6bc329 (sentinel lookup, plain class name, contracts, README,
+CHANGELOG, GUIDE) and the commit that records this section.

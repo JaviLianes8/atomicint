@@ -280,3 +280,29 @@ policy) and is killed since set and swap values reach past the range.
 | N12 | `BoundedAtomicInt.__repr__` reads `type(self).__name__` | killed: `tests/test_metaclass.py::test_a_subclass_under_a_metaclass_name_is_made_shown_and_copied[copy-raising]` |
 | N13 | an out-of-range add stores the policy's value without checking the value it read | killed: `tests/test_linearizability.py::test_every_recorded_history_is_linearizable[saturate]` |
 | N14 | an out-of-range swap stores the policy's value without checking the value it read | killed: `tests/test_linearizability.py::test_every_recorded_history_is_linearizable[saturate]` |
+
+## After QA round 7
+
+`_lookup` now returns a private sentinel for a missing name, so a `__get__` set to `None`
+is called as Python calls it and an `__index__` set to `None` is refused, and
+`class_name()` returns a plain copy of the name Python keeps. P1 to P7 are lens e's seven
+survivors of its round 7 mutation run (its N11, N12, N13, N14, N17, N21 and N24); P8 to
+P12 mutate the new code. Each was applied alone to a copy of the fixed tree at a6bc329 and
+run with `-x` on another machine (CPython 3.14.2) against the index lookup, class name,
+slot MRO, metaclass, input, message, copy, slot and class identity tests. All 12 are
+killed.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| P1 | `_lookup` walks `cls.__mro__` (lens e's N11) | killed: `tests/test_index_lookup.py::test_a_metaclass_mro_cannot_hide_an_inherited_index_hook[hiding the bases]` |
+| P2 | `_lookup` walks `type.mro(cls)` (lens e's N12) | killed: `tests/test_index_lookup.py::test_the_hook_comes_from_the_order_a_metaclass_mro_made` |
+| P3 | `_lookup` reads only the class's own namespace (lens e's N13) | killed: `tests/test_index_lookup.py::test_an_inherited_index_hook_is_found[one level]` |
+| P4 | `_lookup` reads `vars(klass)` (lens e's N14) | killed: `tests/test_index_lookup.py::test_a_metaclass_namespace_cannot_hide_or_replace_an_index_hook[empty]` |
+| P5 | `_listed` reads `getattr(klass, "__slots__", ())` (lens e's N17) | killed: `tests/test_slot_mro.py::test_an_inherited_slots_list_adds_no_attribute_to_a_copy[copy-OpenPlain]` |
+| P6 | `_collect` walks `type.mro(cls)` (lens e's N21) | killed: `tests/test_slot_mro.py::test_a_slot_of_a_base_left_out_of_the_mro_is_not_copied[copy-ChildPlain]` |
+| P7 | covered bases taken from `type.mro(klass)` (lens e's N24) | killed: `tests/test_slot_mro.py::test_a_base_whose_mro_leaves_a_slotted_class_out_does_not_hide_its_slots[copy-BelowPlain]` |
+| P8 | a `__get__` set to `None` treated as missing (the old behaviour) | killed: `tests/test_index_lookup.py::test_a_hook_whose_class_sets_get_to_none_is_refused_as_python_refuses_it` |
+| P9 | an `__index__` set to `None` not refused before binding | killed: `tests/test_index_lookup.py::test_an_index_hook_set_to_none_is_refused` |
+| P10 | `class_name()` returns the kept name as is | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| P11 | `_lookup` returns `None` for a missing name | killed: `tests/test_metaclass.py::test_an_index_hook_is_bound_as_python_binds_it_whatever_its_metaclass_says` |
+| P12 | `class_name()` returns `str()` of the kept name | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
