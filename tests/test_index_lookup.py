@@ -171,3 +171,13 @@ def test_each_class_dict_is_read_once_so_a_changing_key_cannot_raise_key_error()
     with pytest.raises(TypeError, match=r"must be an integer, not Unsure$"):
         counter.add(_fickle())
     assert counter.get() == 10
+    # One lookup may ask a key more than once (its probe can pass the same slot twice),
+    # so either outcome is right here; a KeyError, or a change on refusal, is not.
+    for answers in [(False, True), (False, True, False), (True, False, True)]:
+        counter = AtomicInt(3)
+        try:
+            counter.add(_fickle(*answers))
+        except TypeError:
+            assert counter.get() == 3
+        else:
+            assert counter.get() == 10
