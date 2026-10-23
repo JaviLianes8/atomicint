@@ -40,8 +40,8 @@ Progress:
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending (orchestrator) |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them); after QA round 7, lens e's seven survivors and five mutants of the new code, all killed; after QA round 8, lens e's two survivors (Q11, Q16) and eight mutants of the new code and tests, all killed |
-| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; round 7 (lenses a, c, d and e at 3d26d7b): every round 6 finding confirmed fixed, 12 new findings (10 distinct: three lenses reported the same `__get__ = None` gap) plus a closed re-check and a summary, all fixed, none disputed; round 8 (lenses a, c and e at caf7b6d): every round 7 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported the same double read of a class dictionary) plus three closed re-checks, all fixed, none disputed; re-verification by the lenses pending |
+| 18 | Contracts bite (mutations) | PASS: author 45 mutants, 44 killed at once, the survivor closed by a new contract; after QA round 1, 22 more over the new code, all killed (one after a new contract); after QA round 2, the four survivors of the mutation lens and three new mutants, all killed by new contracts; after the round 2 re-check, the lens's eight survivors and six mutants of the rewritten slot lookup, all killed; after QA round 3, the lens's five survivors and four mutants of the stored slot names, all killed, one more equivalent; after QA round 4, the lens's six survivors (V19, V20, S06, S09, S12, S15), three more allocation mutants and nine mutants of the new slot code, all killed; after the fixes of the round 5 probes, 22 mutants of the new code, 19 killed and 3 explained (two equivalent, one with no effect on a copy); after QA round 6, 14 mutants of the new code and the stronger tests, all killed (lens e's S10 among them); after QA round 7, lens e's seven survivors and five mutants of the new code, all killed; after QA round 8, lens e's two survivors (Q11, Q16) and eight mutants of the new code and tests, all killed; after QA round 9, lens e's six survivors (S10, C01 to C05), four more readers of the class name and nine mutants of the new lookup, all killed |
+| 19 | Five independent QA lenses | round 1: 18 findings, all fixed; round 2 (lenses a, c, d and e at 51e2af2): 11 findings, all fixed, none disputed (see QA lenses); round 2 re-check (lenses c and e at 08186fc): 9 findings, all fixed, none disputed; round 3 (lenses c and e at 90eab2e): 6 findings (plus a closed re-check and a summary), all fixed, none disputed; round 4 (lenses c and e at b7e720a): 7 findings (plus four closed re-checks and a summary), all fixed, none disputed; round 5 (lenses c and e at 54db276) was interrupted before it reported, and the four defects its probes show are fixed (see Round 5 probes); round 6 (lenses a, c, d and e at a270808): 7 findings (plus two summaries), all fixed, none disputed; round 7 (lenses a, c, d and e at 3d26d7b): every round 6 finding confirmed fixed, 12 new findings (10 distinct: three lenses reported the same `__get__ = None` gap) plus a closed re-check and a summary, all fixed, none disputed; round 8 (lenses a, c and e at caf7b6d): every round 7 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported the same double read of a class dictionary) plus three closed re-checks, all fixed, none disputed; round 9 (lenses a, c and e at 0cf40ba): every round 8 finding confirmed fixed, 4 new findings (3 distinct: lenses a and c reported two sides of the same lookup gap) plus four closed re-checks, all fixed, none disputed; re-verification by the lenses pending |
 
 ## Baseline on 0.2.0 (before any change)
 
@@ -636,3 +636,46 @@ Verification:
 
 Commits of this round: d34610e (single read lookup, contracts, CHANGELOG, GUIDE), 0f334ee
 (either outcome of a key asked twice) and the commit that records this section.
+
+### Round 9 (lenses a, c and e at 0cf40ba)
+
+Every round 8 finding was re-checked and found fixed: lens a's `atomos` sentence, the
+`__get__ = None` case and the single read on CPython 3.10.19, 3.13.2 and 3.14.2t
+(50000 calls on 3.14t with another thread changing the hook or its `__get__`: only the
+hook or `TypeError`); lens c's single read on 3.10 to 3.14t (300000 calls of the round 8
+repro on 3.14t with no `KeyError`); lens e's Q11 and Q16 and the older G1 to G4 mutants,
+all killed. They found one defect in the lookup, from two sides, and two groups of
+mutants no contract killed.
+
+| Lens | Id | Severity | Finding | What changed |
+| --- | --- | --- | --- | --- |
+| a | N1-recheck, N2-recheck, N3-recheck | low | Round 8's findings are fixed | Nothing to change |
+| c | N3 | low | Round 8's double read is fixed | Nothing to change |
+| e | RECHECK-H1-H2 | low | Q11, Q16 and N11 to N14 are killed | Nothing to change |
+| a | N4 | low | The module sentinel `_MISSING` stood both for the `.get` default and for "this class does not hold the name", so a class holding that very object under `__index__` (or a hook's class under `__get__`) was skipped and its base's hook used: a value Python refuses was stored (1 to 6 by `add`, a bound of 5), and a hook was bound through the base's `__get__` (21) | `_lookup` returns `(found,)` or `()`, and its `.get` default is a new object made on each call, so no object a class can hold stands for "absent". `tests/test_lookup_absent.py`: a plain object, and every plain object `_coerce` keeps, held under `__index__` when the class is made and assigned later, and under `__get__` on the hook's class, each refused as Python refuses it (constructor, `add`, a bound, value unchanged) |
+| c | N4 | low | A class dictionary key that hashes like the name and whose `__eq__` raises (or returns an object whose `__bool__` raises) let that exception out of the constructor, the operations and the bounds; Python's type lookup ends the search with nothing found, so it raises `TypeError`, or calls the hook unbound when the failing search is for `__get__` | `_lookup` ends the search with nothing found when a read raises an `Exception` (an interrupt or exit still goes through). `tests/test_lookup_absent.py`: a raising and an unanswerable key, alone and on a subclass of a class with a hook (Python stops there too); a key colliding with `__get__` on the hook's class (the hook called unbound, 4); `compare_and_set` and a bound with the counter untouched. CHANGELOG "Fixed" and GUIDE inputs |
+| e | F1 | low | Mutant S10 (`found != _MISSING` for `found is not _MISSING`) survived: no hook compared equal to everything | `test_a_found_hook_is_judged_by_identity_never_by_equality`: an `__index__` hook, and a `__get__` on the hook's class, whose `__eq__` and `__ne__` claim equality, or raise, each taken as `operator.index` takes it through the constructor, every operation and the bounds |
+| e | F2 | low | Mutants C01 to C05 (`class_name()` reading the name through `strip`, `rstrip`, `removeprefix`, `ljust`, `expandtabs`) survived: the hostile name overrode a hand-made list of methods | The hostile name in `tests/test_name_subclass.py` now overrides every callable in `vars(str)` except `__new__`, so a reader added in a later Python is covered too |
+
+Lens a's N4 and lens c's N4 are behaviour fixes and are recorded in the CHANGELOG; F1 and
+F2 are missing contracts, the code was right for them. No finding is disputed.
+
+Verification:
+
+- Red before the fix: on the 0cf40ba sources `tests/test_lookup_absent.py` fails 6 of its
+  tests (CPython 3.13.2): the module sentinel held under `__index__` and under `__get__`,
+  both failing keys, the `__get__` key and the untouched counter. The F1 test passes there
+  (it pins what was right) and kills S10.
+- Gates at 24875eb on another machine from a fresh clone, CPython 3.14.2: `ruff format
+  --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest`
+  (1040 passed, 43 skipped: the same skips as round 8) each exit 0.
+- Mutants: lens e's six survivors, four more readers of the class name and nine mutants of
+  the new lookup, each alone on a copy of 24875eb, run with `-x` on the same machine
+  against the lookup, class name, metaclass, input, message and class hook tests after an
+  unmutated baseline (358 passed, 2 skipped: the free-threaded race tests), all killed
+  ([CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/atomicint/blob/main/CERT-1.0-MUTANTS.md)).
+  The 0cf40ba `_coerce.py` with the new tests fails too.
+
+Commits of this round: 24875eb (a lookup that no held object can fool and that treats a
+failing key as no hook, contracts, CHANGELOG, GUIDE) and the commit that records this
+section.

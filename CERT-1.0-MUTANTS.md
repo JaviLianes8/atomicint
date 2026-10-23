@@ -329,3 +329,35 @@ metaclass, input, message, class hook and copy tests, after an unmutated baselin
 | R6 | `class_name()` returns `name.replace('', '')` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
 | R7 | `class_name()` returns `'%s' % (name,)` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
 | R8 | `_lookup` tries `[]`, and after a miss reads with `.get` and then `[]` | killed: `tests/test_index_lookup.py::test_each_class_dict_is_read_once_so_a_changing_key_cannot_raise_key_error` |
+
+## After QA round 9
+
+`_lookup` returns `(found,)` or `()` with a default made on each call, and a read that
+raises ends the search with nothing found. S10 and C01 to C05 are lens e's survivors of
+its round 9 run; C06 to C09 read the class name through four more `str` methods; T1 to T9
+mutate the new lookup. Each was applied alone to a copy of 24875eb and run with `-x` on
+another machine (CPython 3.14.2) against the lookup, class name, metaclass, input,
+message and class hook tests, after an unmutated baseline run (358 passed, 2 skipped).
+All 19 are killed.
+
+| Id | Mutation | Result |
+| --- | --- | --- |
+| S10 | `found != absent` for `found is not absent` (lens e's) | killed: `tests/test_lookup_absent.py::test_a_found_hook_is_judged_by_identity_never_by_equality[equal]` |
+| C01 | `class_name()` returns `name.strip()` (lens e's) | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C02 | `class_name()` returns `name.rstrip()` (lens e's) | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C03 | `class_name()` returns `name.removeprefix('')` (lens e's) | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C04 | `class_name()` returns `name.ljust(0)` (lens e's) | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C05 | `class_name()` returns `name.expandtabs()` (lens e's) | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C06 | `class_name()` returns `name.zfill(0)` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C07 | `class_name()` returns `name.center(0)` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C08 | `class_name()` returns the first part of `name.partition()` on a NUL | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| C09 | `class_name()` returns `name.format_map({})` | killed: `tests/test_name_subclass.py::test_a_str_subclass_name_gives_the_documented_message[raising]` |
+| T1 | the `.get` default is one module-level object again | killed: `tests/test_lookup_absent.py::test_an_object_held_under_index_hides_the_base_hook[held1]` |
+| T2 | a read that raises skips that class and goes on | killed: `tests/test_lookup_absent.py::test_a_class_dict_that_fails_to_answer_has_no_hook[raises]` |
+| T3 | a read that raises is not caught | killed: `tests/test_lookup_absent.py::test_a_class_dict_that_fails_to_answer_has_no_hook[raises]` |
+| T4 | only a `KeyError` from a read is caught | killed: `tests/test_lookup_absent.py::test_a_class_dict_that_fails_to_answer_has_no_hook[raises]` |
+| T5 | a `__get__` set to `None` treated as absent | killed: `tests/test_index_lookup.py::test_a_hook_whose_class_sets_get_to_none_is_refused_as_python_refuses_it` |
+| T6 | an `__index__` set to `None` not refused before binding | killed: `tests/test_index_lookup.py::test_an_index_hook_set_to_none_is_refused` |
+| T7 | `found[0] == None` for `found[0] is None` | killed: `tests/test_lookup_absent.py::test_a_found_hook_is_judged_by_identity_never_by_equality[equal]` |
+| T8 | a read that raises answers `(None,)` | killed: `tests/test_lookup_absent.py::test_a_hook_class_that_fails_to_answer_for_get_is_called_unbound` |
+| T9 | a class holding `None` treated as not holding the name | killed: `tests/test_index_lookup.py::test_a_hook_whose_class_sets_get_to_none_is_refused_as_python_refuses_it` |
