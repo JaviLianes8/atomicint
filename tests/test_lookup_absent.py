@@ -2,12 +2,14 @@
 
 A class that holds any object under ``__index__`` (or a hook's class under ``__get__``)
 stops the search there, whatever that object is, and a class dictionary whose key fails
-to compare ends the search with nothing found, as Python's own type lookup does. Each
-case is checked against ``operator.index``.
+to compare (raises an ``Exception``) ends the search with nothing found, as Python's own
+type lookup does. Each case is checked against ``operator.index``. An interrupt or exit
+raised by that comparison reaches the caller instead, with the counter untouched.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -49,18 +51,22 @@ def test_an_object_held_under_get_on_the_hook_class_is_called(held: object) -> N
 
 
 class Bad(str):
-    """A class dict key that hashes like ``target`` and fails when compared."""
+    """A class dict key that hashes like ``target`` and, once armed, fails when compared."""
 
     target = ""
     unanswerable = False
+    armed = True
+    error: type[BaseException] = RuntimeError
 
     def __hash__(self) -> int:
         return hash(self.target)
 
     def __eq__(self, other: object) -> Any:
+        if not self.armed:
+            return False
         if self.unanswerable:
             return Unanswerable()
-        raise RuntimeError("compare")
+        raise self.error("compare")
 
 
 class Unanswerable:
@@ -68,19 +74,68 @@ class Unanswerable:
         raise ValueError("no answer")
 
 
-def _bad(target: str, unanswerable: bool = False) -> Bad:
+def _bad(target: str, unanswerable: bool = False, error: type[BaseException] = RuntimeError) -> Bad:
     key = Bad("key")
-    key.target, key.unanswerable = target, unanswerable
+    key.target, key.unanswerable, key.error = target, unanswerable, error
     return key
 
 
-@pytest.mark.parametrize("unanswerable", [False, True], ids=["raises", "unanswerable"])
-def test_a_class_dict_that_fails_to_answer_has_no_hook(unanswerable: bool) -> None:
-    lone = type("Lone", (), {_bad("__index__", unanswerable): 1})
+Custom = type("Custom", (Exception,), {})
+# Each way a comparison can fail: any Exception, a KeyError (which a read with [] would
+# take for "absent"), and an answer whose truth value raises.
+FAILURES = {
+    "raises": (False, RuntimeError),
+    "key error": (False, KeyError),
+    "custom": (False, Custom),
+    "unanswerable": (True, RuntimeError),
+}
+
+
+@pytest.mark.parametrize("failure", list(FAILURES))
+def test_a_class_dict_that_fails_to_answer_has_no_hook(failure: str) -> None:
+    lone = type("Lone", (), {_bad("__index__", *FAILURES[failure]): 1})
     _refused_everywhere(lone(), r"must be an integer, not Lone$")
     # Python stops at the class that failed, so a base's hook is not reached.
-    child = type("Child", (Five,), {_bad("__index__", unanswerable): 1})
+    child = type("Child", (Five,), {_bad("__index__", *FAILURES[failure]): 1})
     _refused_everywhere(child(), r"must be an integer, not Child$")
+
+
+Halt = type("Halt", (BaseException,), {})
+
+
+@pytest.mark.parametrize(
+    "error", [KeyboardInterrupt, SystemExit, GeneratorExit, Halt], ids=lambda e: e.__name__
+)
+def test_an_interrupt_or_exit_from_a_failing_key_reaches_the_caller(
+    error: type[BaseException],
+) -> None:
+    # Python's lookup drops it; the counter lets it through, so Ctrl-C is never lost.
+    counter = AtomicInt(1)
+    calls: list[Callable[[Any], object]] = [
+        AtomicInt,
+        counter.add,
+        counter.set,
+        lambda value: counter.compare_and_set(1, value),
+        lambda value: BoundedAtomicInt(0, minimum=value),
+    ]
+    for base in [(), (Five,)]:
+        value = type("Number", base, {_bad("__index__", error=error): 1})()
+        for call in calls:
+            with pytest.raises(error, match=r"^compare$"):
+                call(value)
+    assert counter.get() == 1
+
+
+def test_a_failing_key_stored_after_the_hook_does_not_hide_it() -> None:
+    # The hook is found by identity before the failing key is ever compared.
+    index_key, get_key = _bad("__index__"), _bad("__get__")
+    index_key.armed = get_key.armed = False
+    number = type("Number", (), {"__index__": lambda self: 7, index_key: 1})
+    hook = type("Hook", (), {"__get__": Binds.__get__, "__call__": Binds.__call__, get_key: 1})
+    bound = type("Bound", (), {"__index__": hook()})
+    index_key.armed = get_key.armed = True
+    _taken_everywhere(number(), 7)
+    _taken_everywhere(bound(), 21)
 
 
 def test_a_hook_class_that_fails_to_answer_for_get_is_called_unbound() -> None:
@@ -110,10 +165,22 @@ class Agreeable:
     __hash__ = object.__hash__
 
 
+class Falsy(Agreeable):
+    """A hook object that is false in a truth test, or whose truth test raises."""
+
+    def __bool__(self) -> bool:
+        if self.raising:
+            raise RuntimeError("truth")
+        return False
+
+
 @pytest.mark.parametrize("raising", [False, True], ids=["equal", "raising"])
-def test_a_found_hook_is_judged_by_identity_never_by_equality(raising: bool) -> None:
-    _taken_everywhere(type("Number", (), {"__index__": Agreeable(6, raising)})(), 6)
-    binder = type("Hook", (), {"__get__": Agreeable(8, raising), "__call__": lambda s: 0})
+@pytest.mark.parametrize("kind", [Agreeable, Falsy])
+def test_a_found_hook_is_judged_by_identity_never_by_equality_or_truth(
+    kind: type[Agreeable], raising: bool
+) -> None:
+    _taken_everywhere(type("Number", (), {"__index__": kind(6, raising)})(), 6)
+    binder = type("Hook", (), {"__get__": kind(8, raising), "__call__": lambda s: 0})
     _taken_everywhere(type("Number", (), {"__index__": binder()})(), 8)
 
 

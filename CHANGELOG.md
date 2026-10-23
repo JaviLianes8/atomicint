@@ -40,9 +40,12 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   documented `TypeError`, never with a `KeyError`. The first class along the MRO that
   holds `__index__` (or, on the hook's class, `__get__`) decides whatever object it holds,
   so a subclass can no longer fall through to its base's hook by holding one particular
-  object, and a class dictionary key whose comparison raises ends the search with no hook
-  found, as in Python: the documented `TypeError` (or an unbound call of the hook), never
-  the comparison's own exception.
+  object, and a class dictionary key whose comparison raises an `Exception` ends the
+  search with no hook found, as in Python: the documented `TypeError` (or an unbound call
+  of the hook), never the comparison's own exception. An interrupt or exit raised by the
+  comparison (`KeyboardInterrupt`, `SystemExit` or any other exception that is not an
+  `Exception`) still reaches the caller, where Python would drop it, and the counter is
+  left as it was.
 - Error messages and `repr()` use the name Python keeps for a class, as Python's own
   messages do, and a name given as a `str` subclass (by `type()` or by assigning
   `__name__`) is read as the plain text it holds. Before, a metaclass that answers for

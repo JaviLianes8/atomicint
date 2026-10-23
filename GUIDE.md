@@ -53,9 +53,12 @@ called the way Python itself does it, so a `classmethod` or `staticmethod` `__in
 works too, and a hook whose class sets `__get__` to `None` is refused as Python refuses
 it. The hook is looked up on each call, reading every class dictionary once, and the
 first class along the MRO that holds the name decides, whatever object it holds. A key
-in a class dictionary that fails to compare (its `__eq__` raises) ends the search with
-no hook found, as in Python. Python settles whether a class has the hook when the class
-is made or the attribute is set, so the two can differ only for a dictionary key whose
+in a class dictionary that fails to compare (its `__eq__` raises an `Exception`) ends the
+search with no hook found, as in Python. An interrupt or exit raised there
+(`KeyboardInterrupt`, `SystemExit` or any other exception that is not an `Exception`)
+reaches the caller instead, where Python would drop it, so Ctrl-C is never lost; the
+counter is left as it was. Python settles whether a class has the hook when the class
+is made or the attribute is set, so otherwise the two can differ only for a key whose
 equality changes its answer over time; even then the input is taken, or refused with
 `TypeError`. The check uses an
 object's real type: one that claims to be an `int` through `__class__` is not taken for

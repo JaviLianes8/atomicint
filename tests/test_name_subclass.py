@@ -21,8 +21,12 @@ def _refuse(*args: Any) -> Any:
 
 
 # Any method a str has could be used to read the text back, so every one refuses; only
-# __new__, which makes the name, is left alone.
-READERS = tuple(sorted(m for m, v in vars(str).items() if callable(v) and m != "__new__"))
+# __new__, which makes the name, is left alone. A subclass may also define what str does
+# not: the reflected and in-place forms of str's operators (Python calls the subclass's
+# __radd__ before str's own +) and __bool__, which a truth test calls before __len__.
+OWN = {m for m, v in vars(str).items() if callable(v) and m != "__new__"}
+EXTRA = {f"__{form}{op}__" for op in ("add", "mul", "mod") for form in ("r", "i")} | {"__bool__"}
+READERS = tuple(sorted(OWN | EXTRA))
 HOSTILE = {method: _refuse for method in READERS}
 Raising: Any = type("Raising", (str,), HOSTILE)
 SECRET = "sk_live_SECRET_" + "A" * 10_000
