@@ -45,11 +45,12 @@ def as_int(value: SupportsIndex, name: str) -> int:
 
 def _lookup(cls: type, name: str) -> Any:
     # The class attribute as the interpreter finds it: along the real MRO, never through
-    # the metaclass.
+    # the metaclass. One read per class, as Python's own lookup makes: between two reads
+    # another thread may delete the name, or a key equal to it may change its answer.
     for klass in MRO.__get__(cls):
-        namespace = NAMESPACE.__get__(klass)
-        if name in namespace:
-            return namespace[name]
+        found = NAMESPACE.__get__(klass).get(name, _MISSING)
+        if found is not _MISSING:
+            return found
     return _MISSING
 
 

@@ -20,10 +20,19 @@ def _refuse(*args: Any) -> Any:
     raise RuntimeError("hostile name")
 
 
-HOSTILE = {
-    method: _refuse
-    for method in ("__len__", "__format__", "__getitem__", "__str__", "__add__", "lstrip")
-}
+# Every way to read the text back from a str subclass: none may be used.
+READERS: tuple[str, ...] = (
+    "__len__",
+    "__format__",
+    "__getitem__",
+    "__str__",
+    "__add__",
+    "__radd__",
+    "__iter__",
+)
+READERS += ("__repr__", "__mod__", "__rmod__", "__mul__", "__contains__", "__getnewargs__")
+READERS += ("lstrip", "encode", "join", "format", "split", "replace", "casefold", "translate")
+HOSTILE = {method: _refuse for method in READERS}
 Raising: Any = type("Raising", (str,), HOSTILE)
 SECRET = "sk_live_SECRET_" + "A" * 10_000
 Lying: Any = type(

@@ -34,7 +34,10 @@ listed in the guide, are kept for the whole 1.x series (one error type changed f
   `__index__` could answer `True` past the `bool` check and store 1. The hook is bound
   exactly as Python binds it, whatever the metaclass of the hook's own class says, and a
   hook whose class sets `__get__` to `None` is refused with the `TypeError` Python raises
-  for it; before, such a hook was called unbound and its result stored.
+  for it; before, such a hook was called unbound and its result stored. The lookup
+  reads each class dictionary once, as Python's does, so a hook that another thread adds
+  or deletes meanwhile (on a free-threaded build) is taken, or refused with the
+  documented `TypeError`, never with a `KeyError`.
 - Error messages and `repr()` use the name Python keeps for a class, as Python's own
   messages do, and a name given as a `str` subclass (by `type()` or by assigning
   `__name__`) is read as the plain text it holds. Before, a metaclass that answers for

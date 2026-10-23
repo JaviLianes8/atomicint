@@ -51,10 +51,13 @@ Every value, amount, expected value, bound and update result must be an integer:
 `int`, or an object with `__index__` (NumPy integers, another `AtomicInt`), found and
 called the way Python itself does it, so a `classmethod` or `staticmethod` `__index__`
 works too, and a hook whose class sets `__get__` to `None` is refused as Python refuses
-it. The check uses an object's real type: one that claims to be an `int` through
-`__class__` is not taken for one. Anything else raises `TypeError` before the counter is
-touched. In particular a float is never
-truncated, a string is never parsed, and `bool` is refused even though it is an `int`
+it. The hook is looked up on each call, reading every class dictionary once. Python
+settles whether a class has the hook when the class is made or the attribute is set, so
+the two can differ only for a dictionary key whose equality changes its answer over
+time; even then the input is taken, or refused with `TypeError`. The check uses an
+object's real type: one that claims to be an `int` through `__class__` is not taken for
+one. Anything else raises `TypeError` before the counter is touched. In particular a
+float is never truncated, a string is never parsed, and `bool` is refused even though it is an `int`
 subclass, because a counter set to `True` is almost always a bug. Type checkers accept
 `bool` where an `int` is expected, so that case is caught at run time only. An `int`
 subclass is stored as a plain `int`.
